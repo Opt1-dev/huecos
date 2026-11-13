@@ -6,6 +6,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { session } from './session';
 import { addDays, localDate, isValidTimeZone } from '../../../supabase/functions/_shared/tz.ts';
+import type { TitleRow } from './repeats';
 import type { BlockedKind, CalendarInfo, EntryInput, Role, ScheduleData, ScheduleSettings, TaskInput } from '../engine/schedule';
 
 export interface SettingsRow {
@@ -42,6 +43,8 @@ export interface CalendarRow {
   sort_order: number;
   /** feed = synced from an .ics link; manual = entries typed in Huecos. */
   source: 'feed' | 'manual';
+  /** Event titles hidden in Huecos (days off, holidays…). */
+  hidden_titles: string[];
   feed_host: string | null;
   last_synced_at: string | null;
   last_error: string | null;
@@ -109,7 +112,7 @@ interface Snapshot {
 }
 
 const CAL_COLUMNS =
-  'id, name, role, color, buffer_before_min, buffer_after_min, counts_busy, sort_order, source, feed_host, last_synced_at, last_error';
+  'id, name, role, color, buffer_before_min, buffer_after_min, counts_busy, sort_order, source, hidden_titles, feed_host, last_synced_at, last_error';
 const ENTRY_COLUMNS = 'id, calendar_id, title, start_min, end_min, weekdays, start_date, end_date';
 
 export const settingsRow = signal<SettingsRow | null>(null);
@@ -314,6 +317,8 @@ export const scheduleData = computed<ScheduleData>(() => ({
     bufferBeforeMin: c.buffer_before_min,
     bufferAfterMin: c.buffer_after_min,
     countsBusy: c.counts_busy,
+    // Older offline snapshots have no hidden_titles.
+    hiddenTitles: c.hidden_titles ?? [],
   })),
   events: events.value.map((e) => ({
     id: e.id,
@@ -437,6 +442,25 @@ export async function deleteCalendar(id: string): Promise<void> {
   events.value = events.value.filter((e) => e.calendar_id !== id);
   entries.value = entries.value.filter((e) => e.calendar_id !== id);
   await afterWrite();
+}
+
+export async function setHiddenTitles(id: string, titles: string[]): Promise<void> {
+  const { data, error } = await supabase.from('calendars').update({ hidden_titles: titles }).eq('id', id).select(CAL_COLUMNS).single();
+  fail(error);
+  calendars.value = calendars.value.map((c) => (c.id === id ? (data as CalendarRow) : c));
+  await afterWrite();
+}
+
+/** Titles and times of every synced event of a calendar (to find repeated titles). */
+export async function calendarTitles(calendarId: string): Promise<TitleRow[]> {
+  if (demoMode.value) return events.value.filter((e) => e.calendar_id === calendarId);
+  const { data, error } = await supabase
+    .from('events')
+    .select('title, all_day, start_at, end_at')
+    .eq('calendar_id', calendarId)
+    .limit(5000);
+  fail(error);
+  return (data ?? []) as TitleRow[];
 }
 
 export type EntryFields = Omit<EntryRow, 'id' | 'calendar_id'>;

@@ -35,7 +35,7 @@ export function Login() {
     const { error } = await sendMagicLink(email.trim());
     if (error) {
       // Supabase answers 429 "email rate limit exceeded" or "only request this after N seconds".
-      const limited = /rate limit|after d+ seconds/i.test(error);
+      const limited = /rate limit|after \d+ seconds/i.test(error);
       setState({ kind: 'error', message: limited ? tr('login.rateLimited') : error });
     } else {
       setState({ kind: 'sent' });
