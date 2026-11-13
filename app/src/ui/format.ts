@@ -53,3 +53,19 @@ export function errorText(e: unknown): string {
 }
 
 export const QUADRANT_KEYS: Record<1 | 2 | 3 | 4, MessageKey> = { 1: 'q.1', 2: 'q.2', 3: 'q.3', 4: 'q.4' };
+
+/** "lun. 16" style column header parts. */
+export function weekdayDay(date: string): { weekday: string; day: string } {
+  const [y, m, d] = date.split('-').map(Number);
+  const ms = Date.UTC(y!, m! - 1, d!);
+  return {
+    weekday: new Intl.DateTimeFormat(locale.value, { weekday: 'short', timeZone: 'UTC' }).format(ms),
+    day: String(d),
+  };
+}
+
+/** "16 nov." style short date. */
+export function shortDate(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Intl.DateTimeFormat(locale.value, { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(Date.UTC(y!, m! - 1, d!));
+}

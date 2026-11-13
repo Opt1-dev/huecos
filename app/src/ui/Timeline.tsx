@@ -3,7 +3,9 @@ import type { Block, DayPlan } from '../engine/schedule';
 import { MINUTE } from '../../../supabase/functions/_shared/tz.ts';
 import { timeLabel } from './format';
 
-const PX_PER_MIN = 0.9;
+export const PX_PER_MIN = 0.9;
+/** Week columns use a smaller scale so the whole 08:00–02:00 range fits on screen. */
+export const WEEK_PX_PER_MIN = 0.6;
 const KIND_COLORS: Partial<Record<Block['kind'], string>> = { practicas: '#0369a1', focus: '#1d4ed8' };
 
 /** Black or white text, whichever contrasts more with a #rrggbb background. */
@@ -22,39 +24,53 @@ interface Props {
   plan: DayPlan;
   tz: string;
   onSelect: (block: Block) => void;
+  /** Week column: no hour labels, titles only, smaller scale. */
+  compact?: boolean;
+  label?: string;
 }
 
-function position(plan: DayPlan, b: { startMs: number; endMs: number }) {
+function position(plan: DayPlan, b: { startMs: number; endMs: number }, scale: number) {
   const start = Math.max(b.startMs, plan.displayStartMs);
   const end = Math.min(b.endMs, plan.displayEndMs);
   return {
-    top: ((start - plan.displayStartMs) / MINUTE) * PX_PER_MIN,
-    height: Math.max(((end - start) / MINUTE) * PX_PER_MIN, 0),
+    top: ((start - plan.displayStartMs) / MINUTE) * scale,
+    height: Math.max(((end - start) / MINUTE) * scale, 0),
   };
 }
 
-export function Timeline({ plan, tz, onSelect }: Props) {
-  const tr = t.value;
-  const totalMin = (plan.displayEndMs - plan.displayStartMs) / MINUTE;
+/** Hour marks of a day plan, as epoch ms, from display start to display end. */
+export function hourMarks(plan: DayPlan): number[] {
   const hours: number[] = [];
   for (let ms = plan.displayStartMs; ms <= plan.displayEndMs; ms += 60 * MINUTE) hours.push(ms);
+  return hours;
+}
+
+export function Timeline({ plan, tz, onSelect, compact = false, label }: Props) {
+  const tr = t.value;
+  const scale = compact ? WEEK_PX_PER_MIN : PX_PER_MIN;
+  const totalMin = (plan.displayEndMs - plan.displayStartMs) / MINUTE;
   const midnight = plan.windowEndMs;
 
   return (
-    <div class="timeline" role="group" aria-label={tr('timeline.label')} style={{ height: `${totalMin * PX_PER_MIN}px` }}>
-      {hours.map((ms) => (
-        <div key={ms} class="hour" style={{ top: `${((ms - plan.displayStartMs) / MINUTE) * PX_PER_MIN}px` }} aria-hidden="true">
-          <span>{timeLabel(ms, tz)}</span>
+    <div
+      class={compact ? 'timeline compact' : 'timeline'}
+      role="group"
+      aria-label={label ?? tr('timeline.label')}
+      style={{ height: `${totalMin * scale}px` }}
+    >
+      {hourMarks(plan).map((ms) => (
+        <div key={ms} class="hour" style={{ top: `${((ms - plan.displayStartMs) / MINUTE) * scale}px` }} aria-hidden="true">
+          {!compact && <span>{timeLabel(ms, tz)}</span>}
         </div>
       ))}
       <div
         class="after-midnight"
         aria-hidden="true"
-        style={{ top: `${((midnight - plan.displayStartMs) / MINUTE) * PX_PER_MIN}px`, bottom: 0 }}
+        style={{ top: `${((midnight - plan.displayStartMs) / MINUTE) * scale}px`, bottom: 0 }}
       />
 
       {plan.free.map((f) => {
-        const p = position(plan, f);
+        const p = position(plan, f, scale);
         return (
           <div
             key={`f${f.startMs}`}
@@ -67,16 +83,16 @@ export function Timeline({ plan, tz, onSelect }: Props) {
       })}
 
       {plan.buffers.map((b) => {
-        const p = position(plan, b);
+        const p = position(plan, b, scale);
         return (
           <div key={`b${b.startMs}`} class="block buffer" style={{ top: `${p.top}px`, height: `${p.height}px` }}>
-            {p.height >= 14 && <span>{tr('timeline.buffer')}</span>}
+            {!compact && p.height >= 14 && <span>{tr('timeline.buffer')}</span>}
           </div>
         );
       })}
 
       {plan.busy.map((b) => {
-        const p = position(plan, b);
+        const p = position(plan, b, scale);
         if (p.height <= 0) return null;
         const label = [
           b.kind === 'focus' ? tr('timeline.study') : null,
@@ -87,7 +103,9 @@ export function Timeline({ plan, tz, onSelect }: Props) {
           .filter(Boolean)
           .join(' ');
         const time = `${timeLabel(b.startMs, tz)}–${timeLabel(b.endMs, tz)}`;
-        const content = (
+        const content = compact ? (
+          <span class="block-title">{label}</span>
+        ) : (
           <>
             <span class="block-time">{time}</span> <span class="block-title">{label}</span>
           </>
@@ -95,7 +113,7 @@ export function Timeline({ plan, tz, onSelect }: Props) {
         const color = b.color ?? KIND_COLORS[b.kind] ?? '#1d4ed8';
         const style = {
           top: `${p.top}px`,
-          height: `${Math.max(p.height, 18)}px`,
+          height: `${Math.max(p.height, compact ? 12 : 18)}px`,
           '--cal': color,
           '--busy-text': readableText(color),
         };
@@ -105,13 +123,19 @@ export function Timeline({ plan, tz, onSelect }: Props) {
             type="button"
             class={`block busy ${b.kind}`}
             style={style}
+            title={`${time} ${label}`}
             aria-label={`${tr('timeline.edit', { title: label })}, ${time}`}
             onClick={() => onSelect(b)}
           >
             {content}
           </button>
         ) : (
-          <div key={`${b.kind}${b.taskId ?? ''}${b.startMs}`} class={`block busy ${b.kind}`} style={style}>
+          <div
+            key={`${b.kind}${b.taskId ?? ''}${b.startMs}`}
+            class={`block busy ${b.kind}`}
+            style={style}
+            title={`${time} ${label}`}
+          >
             {content}
           </div>
         );

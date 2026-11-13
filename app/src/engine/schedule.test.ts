@@ -5,6 +5,8 @@ import {
   buildDay,
   mergeIntervals,
   planDay,
+  planWeek,
+  weekStart,
   practicasHours,
   type CalendarInfo,
   type EventInput,
@@ -319,5 +321,46 @@ describe('practicasHours', () => {
     // 1-9 Oct 2026: Thu 1, Fri 2, Mon 5 … Fri 9 = 7 days; on 13 Oct: 7 + Tue 13? no (today excluded) → 1-9 Oct + Mon 12 blocked = 7 days.
     expect(practicasHours(s, '2026-10-13').done).toBe(28);
     expect(practicasHours(s, '2026-10-13').target).toBe(500);
+  });
+});
+
+describe('week plan', () => {
+  it('starts on the Monday of the week, Sunday included', () => {
+    expect(weekStart('2026-11-18')).toBe('2026-11-16');
+    expect(weekStart('2026-11-16')).toBe('2026-11-16');
+    expect(weekStart('2026-11-22')).toBe('2026-11-16');
+    expect(weekStart('2027-01-01')).toBe('2026-12-28');
+  });
+
+  it('builds seven days with week totals and the longest slot', () => {
+    const d = data([ev('other', at('2026-11-17', '08:00'), at('2026-11-17', '20:00'))]);
+    const week = planWeek(D, d, settings(), MORNING);
+    expect(week.days.map((x) => x.date)).toEqual([
+      '2026-11-16',
+      '2026-11-17',
+      '2026-11-18',
+      '2026-11-19',
+      '2026-11-20',
+      '2026-11-21',
+      '2026-11-22',
+    ]);
+    // 6 free days of 16 h, plus 4 h on Tuesday.
+    expect(week.freeTotalMin).toBe(6 * 16 * 60 + 4 * 60);
+    expect(week.busyTotalMin).toBe(12 * 60);
+    expect(week.longestFree!.endMs - week.longestFree!.startMs).toBe(16 * 60 * 60_000);
+  });
+
+  it('matches the day plan for each day, auto-placed tasks included', () => {
+    const now = at(D, '08:00');
+    const d = data([ev('other', at(D, '08:30'), at(D, '20:00'))], [task('a', { durationMin: 120 })]);
+    const week = planWeek(D, d, settings(), now);
+    expect(week.days[2]).toEqual(planDay(D, d, settings(), now).plan);
+    expect(week.placements).toHaveLength(1);
+  });
+
+  it('keeps the DST change day correct', () => {
+    const week = planWeek('2027-03-28', data(), settings(), MORNING);
+    expect(week.days[6]!.date).toBe('2027-03-28');
+    expect(slots(week.days[6]!)).toEqual(['08:00-00:00']);
   });
 });
