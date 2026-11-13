@@ -3,6 +3,7 @@ import { addDays, localDate, zonedToUtc } from '../../../supabase/functions/_sha
 import {
   autoPlace,
   buildDay,
+  deadlineWork,
   entryOccurs,
   mergeIntervals,
   planDay,
@@ -487,5 +488,86 @@ describe('hidden titles', () => {
     const plan = buildDay(D, d, settings(), MORNING);
     expect(plan.busy.map((b) => b.title)).toEqual(['Día libre', 'Turno']);
     expect(plan.busy[0]!.calendarId).toBe('other');
+  });
+});
+
+describe('work before deadlines', () => {
+  const DUE = '2026-11-17';
+  const workCals = (work = 360, max = 120) =>
+    CALS.map((c) => (c.id === 'cesur' ? { ...c, deadlineWorkMin: work, deadlineDailyMaxMin: max } : c));
+  const deadline = (date = DUE, title = 'Vencimiento de Tarea UT4') =>
+    ev('cesur', at(date, '23:59'), at(date, '23:59'), { eventType: 'deadline', title });
+  const withWork = (events: EventInput[], extra: Partial<ScheduleData> = {}, work?: number, max?: number): ScheduleData => ({
+    ...data(events),
+    calendars: workCals(work, max),
+    ...extra,
+  });
+  const where = (b: { startMs: number; endMs: number }) => `${localDate(b.startMs, TZ)} ${hm(b.startMs)}-${hm(b.endMs)}`;
+
+  it('places the work from the day before, going back, at most the daily max', () => {
+    const plan = deadlineWork(withWork([deadline()]), settings());
+    expect(plan.blocks.map(where)).toEqual(['2026-11-16 08:00-10:00', '2026-11-15 08:00-10:00', '2026-11-14 08:00-10:00']);
+    expect(plan.blocks.every((b) => b.kind === 'focus' && b.deadlineId)).toBe(true);
+    const [summary] = [...plan.deadlines.values()];
+    expect(summary).toMatchObject({ totalMin: 360, plannedMin: 360, missingMin: 0, done: false });
+  });
+
+  it('skips days without free time and avoids small crumbs', () => {
+    const events = [
+      deadline(),
+      ev('other', at('2026-11-16', '08:00'), at('2026-11-16', '23:45')), // only 15 min free
+      ev('other', at('2026-11-15', '08:00'), at('2026-11-15', '23:00')), // 1 h free
+    ];
+    const plan = deadlineWork(withWork(events), settings());
+    expect(plan.blocks.map(where)).toEqual([
+      '2026-11-15 23:00-00:00',
+      '2026-11-14 08:00-10:00',
+      '2026-11-13 08:00-10:00',
+      '2026-11-12 08:00-09:00',
+    ]);
+  });
+
+  it('two deadlines share the free time, the earliest deadline first', () => {
+    const plan = deadlineWork(withWork([deadline(DUE, 'B'), deadline('2026-11-16', 'A')], {}, 120), settings());
+    expect(plan.blocks.map((b) => `${b.title} ${where(b)}`)).toEqual(['A 2026-11-15 08:00-10:00', 'B 2026-11-16 08:00-10:00']);
+  });
+
+  it('places nothing for a deadline marked done', () => {
+    const d = deadline();
+    const plan = deadlineWork(withWork([d], { doneDeadlines: [d.id] }), settings());
+    expect(plan.blocks).toEqual([]);
+    expect(plan.deadlines.get(d.id)).toMatchObject({ done: true, plannedMin: 0 });
+  });
+
+  it('reports the work that found no free time', () => {
+    const busy = Array.from({ length: 61 }, (_, i) => {
+      const day = addDays(DUE, -1 - i);
+      return ev('other', at(day, '08:00'), at(day, '23:00'));
+    });
+    const plan = deadlineWork(withWork([deadline(), ...busy], {}, 360, 120), settings());
+    // 1 h free each evening for 60 days: all 6 h fit, one hour per day.
+    expect(plan.blocks).toHaveLength(6);
+    const tight = deadlineWork(withWork([deadline(), ...busy], {}, 6000, 960), settings());
+    expect([...tight.deadlines.values()][0]).toMatchObject({ plannedMin: 3600, missingMin: 2400 });
+  });
+
+  it('ignores calendars without work, other events and hidden deadlines', () => {
+    const none = deadlineWork({ ...data([deadline()]) }, settings());
+    expect(none.blocks).toEqual([]);
+    const hidden = deadlineWork(
+      { ...withWork([deadline()]), calendars: workCals().map((c) => (c.id === 'cesur' ? { ...c, hiddenTitles: ['vencimiento de tarea ut4'] } : c)) },
+      settings(),
+    );
+    expect(hidden.blocks).toEqual([]);
+    const notDeadline = deadlineWork(withWork([ev('cesur', at(DUE, '10:00'), at(DUE, '11:00'))]), settings());
+    expect(notDeadline.blocks).toEqual([]);
+  });
+
+  it('shows the work in the day plan and keeps auto-placed tasks around it', () => {
+    const now = at('2026-11-16', '07:00');
+    const d = withWork([deadline()], { tasks: [task('a', { durationMin: 60 })] });
+    const { plan, placements } = planDay('2026-11-16', d, settings(), now);
+    expect(plan.busy.filter((b) => b.deadlineId).map(where)).toEqual(['2026-11-16 08:00-10:00']);
+    expect(placements[0]!.blocks.map(where)).toEqual(['2026-11-16 10:00-11:00']);
   });
 });

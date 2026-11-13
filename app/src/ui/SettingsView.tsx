@@ -20,6 +20,7 @@ import {
   updateEntry,
   updateSettings,
   type CalendarInput,
+  type CalendarPatch,
   type CalendarRow,
 } from '../lib/data';
 import { online } from '../lib/session';
@@ -68,6 +69,12 @@ function Status({ message }: { message: { ok: boolean; text: string } | null }) 
       {message?.text ?? ''}
     </p>
   );
+}
+
+/** Hours typed in a field → whole minutes, clamped. */
+function hoursToMinutes(e: Event, min: number, max: number): number {
+  const h = Number((e.target as HTMLInputElement).value.replace(',', '.'));
+  return Math.min(max, Math.max(min, Math.round((Number.isFinite(h) ? h : 0) * 60)));
 }
 
 function numberValue(e: Event): number {
@@ -154,7 +161,7 @@ function CalendarItem({ cal }: { cal: CalendarRow }) {
   const { busy, message, setMessage, run } = useBusy();
   const [feed, setFeed] = useState('');
   const [candidates, setCandidates] = useState<RepeatedTitle[] | null>(null);
-  const save = (patch: Partial<CalendarInput>) => void run(() => updateCalendar(cal.id, patch));
+  const save = (patch: CalendarPatch) => void run(() => updateCalendar(cal.id, patch));
   const hidden = cal.hidden_titles ?? [];
 
   /** Opens the "hide repeated events?" dialog when some titles repeat. */
@@ -201,6 +208,36 @@ function CalendarItem({ cal }: { cal: CalendarRow }) {
           <input type="checkbox" checked={cal.counts_busy} onChange={(e) => save({ counts_busy: (e.target as HTMLInputElement).checked })} />
           <span>{tr('cal.countsBusy')}</span>
         </label>
+        {cal.source === 'feed' && (
+          <>
+            <label class="field">
+              <span>{tr('cal.work')}</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                max={100}
+                step={0.5}
+                value={(cal.deadline_work_min ?? 0) / 60}
+                onChange={(e) => save({ deadline_work_min: hoursToMinutes(e, 0, 6000) })}
+              />
+            </label>
+            <label class="field">
+              <span>{tr('cal.workMax')}</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0.25}
+                max={16}
+                step={0.5}
+                value={(cal.deadline_daily_max_min ?? 120) / 60}
+                disabled={!cal.deadline_work_min}
+                onChange={(e) => save({ deadline_daily_max_min: hoursToMinutes(e, 15, 960) })}
+              />
+            </label>
+            <p class="muted small span-all">{tr('cal.workHelp')}</p>
+          </>
+        )}
       </div>
 
       {cal.source === 'manual' ? (

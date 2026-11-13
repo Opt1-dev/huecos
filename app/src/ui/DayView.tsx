@@ -2,11 +2,12 @@ import { useMemo, useState } from 'preact/hooks';
 import { t } from '../i18n';
 import { calendars, loaded, scheduleData, scheduleSettings, tasks, clearOverride } from '../lib/data';
 import { online } from '../lib/session';
-import { planDay, type Block } from '../engine/schedule';
+import { deadlineWork, planDay, type Block } from '../engine/schedule';
 import { addDays, localDate } from '../../../supabase/functions/_shared/tz.ts';
 import { Timeline } from './Timeline';
 import { EventDialog } from './EventDialog';
 import { EntryDialog } from './EntryDialog';
+import { DeadlineDialog } from './DeadlineDialog';
 import { TasksPanel } from './TasksPanel';
 import { WeekView } from './WeekView';
 import { dayLabel, durationLabel, timeLabel } from './format';
@@ -36,6 +37,8 @@ export function DayView() {
     () => planDay(date, scheduleData.value, s, now),
     [date, scheduleData.value, s, now],
   );
+
+  const work = useMemo(() => deadlineWork(scheduleData.value, s).deadlines, [scheduleData.value, s]);
 
   const dayTasks = tasks.value.filter(
     (tk) =>
@@ -115,11 +118,26 @@ export function DayView() {
             <div>
               <h3 class="small muted">{tr('day.notes')}</h3>
               <ul class="chip-list">
-                {plan.notes.map((n) => (
-                  <li key={`${n.eventId}`} class="chip" style={{ '--cal': n.color ?? 'var(--accent)' }}>
-                    <span>{n.title}</span>
-                  </li>
-                ))}
+                {plan.notes.map((n) => {
+                  const w = n.eventId ? work.get(n.eventId) : undefined;
+                  return (
+                    <li key={`${n.eventId}`} class={w?.done ? 'chip done' : 'chip'} style={{ '--cal': n.color ?? 'var(--accent)' }}>
+                      {w ? (
+                        <button
+                          type="button"
+                          class="chip-btn"
+                          aria-label={tr('deadline.open', { title: n.title })}
+                          onClick={() => setSelected({ ...n, deadlineId: w.eventId })}
+                        >
+                          {w.done ? '✓ ' : w.missingMin > 0 ? '⚠ ' : ''}
+                          {n.title}
+                        </button>
+                      ) : (
+                        <span>{n.title}</span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
@@ -146,7 +164,9 @@ export function DayView() {
       </div>
 
       {selected &&
-        (selected.entryId ? (
+        (selected.deadlineId ? (
+          <DeadlineDialog deadlineId={selected.deadlineId} onClose={() => setSelected(null)} />
+        ) : selected.entryId ? (
           <EntryDialog entryId={selected.entryId} tz={s.tz} onClose={() => setSelected(null)} />
         ) : (
           <EventDialog block={selected} tz={s.tz} onClose={() => setSelected(null)} />

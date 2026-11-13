@@ -95,7 +95,7 @@ export function Timeline({ plan, tz, onSelect, compact = false, label }: Props) 
         const p = position(plan, b, scale);
         if (p.height <= 0) return null;
         const label = [
-          b.kind === 'focus' ? tr('timeline.study') : null,
+          b.deadlineId ? tr('timeline.work') : b.kind === 'focus' ? tr('timeline.study') : null,
           b.title,
           b.moved ? `(${tr('timeline.moved')})` : null,
           b.autoPlaced ? `(${tr('timeline.auto')})` : null,
@@ -117,9 +117,9 @@ export function Timeline({ plan, tz, onSelect, compact = false, label }: Props) 
           '--cal': color,
           '--busy-text': readableText(color),
         };
-        return b.eventId || b.entryId ? (
+        return b.eventId || b.entryId || b.deadlineId ? (
           <button
-            key={b.eventId ? `e${b.eventId}` : `r${b.entryId}${b.startMs}`}
+            key={b.eventId ? `e${b.eventId}` : b.entryId ? `r${b.entryId}${b.startMs}` : `w${b.deadlineId}${b.startMs}`}
             type="button"
             class={`block busy ${b.kind}`}
             style={style}
