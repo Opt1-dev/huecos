@@ -9,5 +9,8 @@ if (!url || !publishableKey) {
 }
 
 export const supabase = createClient(url, publishableKey, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' },
+  // Implicit flow: a sign-in link works in whichever browser opens it (PKCE only
+  // works in the browser that asked for it, which breaks phone ↔ computer and
+  // mail-app browsers). The 6-digit code in the same email covers installed PWAs.
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' },
 });
