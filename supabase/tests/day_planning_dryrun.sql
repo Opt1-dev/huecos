@@ -6,7 +6,7 @@ declare
   b uuid := gen_random_uuid();
   cal uuid;
   ev uuid;
-  secret uuid;
+  secret_id uuid;
   n int;
   feed text;
 begin
@@ -91,11 +91,11 @@ begin
 
   -- Deleting the calendar removes its events, overrides and Vault secret.
   perform set_config('role', 'postgres', true);
-  select feed_secret_id into secret from public.calendars where id = cal;
+  select feed_secret_id into secret_id from public.calendars where id = cal;
   perform set_config('role', 'authenticated', true);
   delete from public.calendars where id = cal;
   perform set_config('role', 'postgres', true);
-  select count(*) into n from vault.secrets where id = secret;
+  select count(*) into n from vault.secrets s where s.id = secret_id;
   if n <> 0 then raise exception 'Vault secret left behind'; end if;
   select count(*) into n from public.overrides where user_id = a;
   if n <> 0 then raise exception 'override left behind'; end if;
