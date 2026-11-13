@@ -24,6 +24,9 @@ Huecos is a phone-first PWA that shows your **real free time** and organises you
 
 ## Local setup
 
+Add `?demo` to the dev-server URL (`http://localhost:5173/huecos/?demo`) to see the app with sample data without signing in; this mode does not exist in production builds.
+
+
 Requirements: Node 22+, Git. Docker is only needed to run a local Supabase stack.
 
 ```bash
@@ -73,6 +76,14 @@ Nothing secret is committed. Create these once.
    insert into public.invitations (email, role) values ('you@example.com', 'admin');
    ```
    Admins can then add or remove invitations; members cannot see the list.
+4. **Calendar sync every 15 minutes** (once). Generate a long random value (for example `openssl rand -hex 32`), then:
+   - Edge Functions → Secrets: add `HUECOS_SYNC_CRON_SECRET` with that value;
+   - SQL editor (the value never goes into the repo):
+     ```sql
+     select vault.create_secret('https://<project-ref>.supabase.co', 'huecos_project_url');
+     select vault.create_secret('<the same random value>', 'huecos_sync_cron_secret');
+     ```
+   The `huecos-sync-calendars` pg_cron job (created by a migration) does nothing until both Vault secrets exist.
 
 ### GitHub Pages
 
@@ -88,19 +99,32 @@ Merging a pull request into `main` runs `deploy.yml`:
 
 `ci.yml` runs on every branch push and pull request: the same app checks plus a job that starts a local Postgres, applies every migration and runs the SQL assertions in `supabase/tests/` (each file ends with `RAISE 'ALL_OK'` so nothing is kept).
 
-## Data model (so far)
+## Data model
 
 | Table | Purpose | Access |
 | --- | --- | --- |
 | `public.invitations` | Email allowlist (`member` or `admin`) | Admins only; read by the Auth hook |
-| `public.settings` | One row per user: language, time zone, free-time window, minimum slot, modules | Owner only (read/update) |
+| `public.settings` | One row per user: language, time zone, free-time window, minimum slot, modules, prácticas settings, last sync | Owner only (read/update) |
+| `public.calendars` | A user's calendars: name, role, colour, buffers before/after, counts as busy, feed host, last sync/error | Owner; `feed_secret_id` can't be written by the browser |
+| `public.events` | Synced occurrences, unique on `(calendar_id, uid, start_at)` | Owner reads; only `sync-calendars` writes |
+| `public.overrides` | Move or cancel an event in Huecos only | Owner, only on their own events |
+| `public.tasks` | Tasks with quadrant (1 urgent+important … 4 neither), optional day/time, duration 15 min–4 h | Owner |
+| `public.blocked_days` | Non-school days and holidays (no prácticas) | Owner |
 | `app_private.admins` | Users who manage invitations | Not exposed |
+| `vault.secrets` | Encrypted calendar feed URLs and the cron secret | Service role only |
 
-A user's settings row is created automatically at sign-up; an invitation with role `admin` also makes the new user an admin.
+A user's settings row is created automatically at sign-up; an invitation with role `admin` also makes the new user an admin. Realtime is enabled on `tasks` and `overrides`.
+
+## Calendar sync
+
+- A user pastes a secret `.ics` link in **Réglages → Calendriers**. The `save-feed` Edge Function accepts only `https://` (or `webcal://`) links to public hosts: no credentials, no custom ports, no `localhost`/`.local`/private or reserved IPs (checked on the name and on every DNS answer, again after each redirect, max 3). It downloads the feed once (15 s, 5 MB max), checks it is iCalendar, then stores the URL **encrypted in Supabase Vault**. The browser only ever sees the host name.
+- `sync-calendars` runs every 15 min from pg_cron (all users) or from the **Synchroniser** button (that user only, at most every 30 s). It expands each feed from 7 days ago to 60 days ahead with ical.js: RRULE/RDATE/EXDATE, moved occurrences (RECURRENCE-ID), all-day events, TZID with or without VTIMEZONE, UTC, `STATUS:CANCELLED`. It upserts the occurrences and deletes the ones that disappeared from the feed.
+- Classification: titles starting with "Vencimiento de" and every event of a *Deadlines* calendar are deadlines (shown, never busy); "Entrega …" events of the *Main* calendar are study sessions (busy, shown as "Session d'étude"); all-day events never block time.
+- Offline: the last loaded data is kept in IndexedDB, the day view works without network, and the header shows "Dernière synchro hh:mm" and "Hors ligne".
 
 ## Scheduling rules
 
-These rules drive the free-time computation. They are implemented as a pure, fully unit-tested TypeScript module in Phase 1. In the multi-user version each value below is a **per-user setting**; the numbers shown are Tomás's defaults.
+These rules drive the free-time computation in `app/src/engine/schedule.ts`, a pure TypeScript module covered by `schedule.test.ts`; time-zone helpers are shared with the Edge Functions in `supabase/functions/_shared/tz.ts`. Each value below is a **per-user setting** (Réglages); the numbers shown are Tomás's values. Buffers belong to a calendar (`Trajet avant/après`), except prácticas, whose buffers are in the prácticas settings.
 
 - Times are **minutes since midnight in the user's time zone** (default `Europe/Madrid`), computed with `Intl`, never by adding hours to UTC.
 - Free time is only counted between **08:00 and 00:00**. Time after midnight is shown but never counted as free.
@@ -110,11 +134,12 @@ These rules drive the free-time computation. They are implemented as a pure, ful
   - 1 h 15 after prácticas (leave, get home, eat);
   - 1 h 15 before every Amorino shift, including "Amorino Oniroma";
   - 30 min before and 30 min after each gym session.
-- **Gym:** 4 days a week, usually 15:00–17:00; Monday and Thursday push, Tuesday and Friday pull.
+- **Gym:** sessions come from the gym calendar (usually 4 days a week, 15:00–17:00; Monday and Thursday push, Tuesday and Friday pull).
+- Day column: 08:00 to 02:00 the next day; events as coloured blocks per calendar, buffers hatched "Trajet", free time as dashed green blocks without text. A buffer is drawn only where no event is, and free time never overlaps a buffer.
 - Overlapping busy blocks (events + buffers + timed tasks) are **merged first**.
-- Free slots shorter than **15 min** are ignored.
+- Free slots shorter than **15 min** are ignored (a slot of exactly 15 min is kept).
 - Output per day: free slots, total free, longest slot, busy total, next slot.
-- **Auto-placement:** an urgent + important task without a time goes into the first free slot long enough within the next 48 h.
+- **Auto-placement:** urgent + important tasks without a time go, oldest first, into the first free slot long enough within the next 48 h (start rounded up to 5 min). If none fits, the task says so.
 - Test cases: overlapping blocks, a shift ending after midnight, colliding buffers, a slot under 15 min, the DST change on 28 Mar 2027, an empty day, 48 h auto-placement with no slot available, a blocked day without prácticas.
 
 ## Roadmap
