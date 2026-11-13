@@ -1,0 +1,25 @@
+import type { Dictionary } from './fr';
+
+export const en: Dictionary = {
+  'app.name': 'Huecos',
+  'app.tagline': 'Your real free time, tasks, assignments and notes.',
+  'tabs.label': 'Sections',
+  'tabs.day': 'My day',
+  'tabs.rendus': 'Assignments & grades',
+  'tabs.notes': 'Notes',
+  'tabs.settings': 'Settings',
+  'login.title': 'Sign in',
+  'login.email': 'Email address',
+  'login.submit': 'Send me a sign-in link',
+  'login.sending': 'Sending…',
+  'login.sent': 'Link sent. Open the email on this device to sign in.',
+  'login.inviteOnly': 'Huecos is invite-only. If your address is not invited, no link will be sent.',
+  'login.error': 'Could not send the link: {message}',
+  'session.signOut': 'Sign out',
+  'settings.language': 'Language',
+  'status.offline': 'Offline',
+  'status.lastSynced': 'Last synced {time}',
+  'placeholder.comingSoon': 'This section arrives in a later phase.',
+  'update.available': 'A new version is available.',
+  'update.reload': 'Update',
+};

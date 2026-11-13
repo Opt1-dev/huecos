@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+
+  database:
+    name: Migrations and SQL tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Start local Postgres and apply migrations
+        run: npx supabase db start
+      - name: Run SQL assertions
+        run: |
+          set -o pipefail
+          for f in supabase/tests/*.sql; do
+            echo "::group::$f"
+            # Each test file ends with RAISE 'ALL_OK' so that nothing is kept.
+            out=$(psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f "$f" 2>&1 || true)
+            echo "$out"
+            echo "::endgroup::"
+            echo "$out" | grep -q "ALL_OK" || { echo "::error file=$f::SQL assertions failed"; exit 1; }
+          done
