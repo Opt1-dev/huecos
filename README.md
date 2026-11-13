@@ -76,7 +76,7 @@ Nothing secret is committed. Create these once.
 
 ### GitHub Pages
 
-Settings → Pages → Source: **GitHub Actions**. On a free GitHub plan, Pages only publishes from **public** repositories; a private repo needs GitHub Pro (or another host).
+Settings → Pages → Source: **GitHub Actions** (already enabled). The repository is **public** because GitHub Pages on a free plan only publishes public repositories; nothing secret lives in the code: keys and passwords are GitHub secrets or Supabase settings, and every user's data is protected by RLS.
 
 ## Deploying
 
