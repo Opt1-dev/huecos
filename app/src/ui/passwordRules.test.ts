@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newPasswordOk } from './AccountSettings';
+import { newPasswordOk } from './passwordRules';
 
 describe('newPasswordOk', () => {
   it('needs the current password', () => expect(newPasswordOk('', 'nouveau-mdp')).toBe(false));

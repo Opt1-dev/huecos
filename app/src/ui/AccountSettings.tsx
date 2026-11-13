@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks';
 import { t } from '../i18n';
-import { MIN_PASSWORD, online, sendPasswordReset, session, signInWithPassword, updatePassword } from '../lib/session';
+import { online, sendPasswordReset, session, signInWithPassword, updatePassword } from '../lib/session';
+import { MIN_PASSWORD, newPasswordOk } from './passwordRules';
 import { authErrorText } from './authText';
 
 type Message = { ok: boolean; text: string } | null;
@@ -11,11 +12,6 @@ function Status({ message }: { message: Message }) {
       {message?.text ?? ''}
     </p>
   );
-}
-
-/** The new password is valid: long enough and different from the current one. */
-export function newPasswordOk(current: string, next: string): boolean {
-  return current.length > 0 && next.length >= MIN_PASSWORD && next !== current;
 }
 
 /** Change the password: current password, then a different new one. */
