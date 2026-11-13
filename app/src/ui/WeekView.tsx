@@ -6,6 +6,7 @@ import { addDays, localDate, MINUTE } from '../../../supabase/functions/_shared/
 import { hourMarks, Timeline, WEEK_PX_PER_MIN } from './Timeline';
 import { EventDialog } from './EventDialog';
 import { EntryDialog } from './EntryDialog';
+import { DeadlineDialog } from './DeadlineDialog';
 import { dayLabel, durationLabel, shortDate, timeLabel, weekdayDay } from './format';
 import { selectedDate, setViewMode, SyncBar, useNow } from './planner';
 
@@ -166,7 +167,9 @@ export function WeekView() {
       </section>
 
       {selected &&
-        (selected.entryId ? (
+        (selected.deadlineId ? (
+          <DeadlineDialog deadlineId={selected.deadlineId} onClose={() => setSelected(null)} />
+        ) : selected.entryId ? (
           <EntryDialog entryId={selected.entryId} tz={s.tz} onClose={() => setSelected(null)} />
         ) : (
           <EventDialog block={selected} tz={s.tz} onClose={() => setSelected(null)} />

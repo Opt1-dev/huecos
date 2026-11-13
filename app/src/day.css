@@ -656,3 +656,20 @@ button.block.busy {
 .hide-list .check > span {
   overflow-wrap: anywhere;
 }
+
+/* Deadlines with planned work */
+.chip-btn {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.chip.done .chip-btn {
+  text-decoration: line-through;
+  color: var(--muted);
+}

@@ -15,6 +15,10 @@ export interface CalendarInfo {
   countsBusy: boolean;
   /** Event titles hidden in Huecos (compared with normalizeTitle). */
   hiddenTitles?: readonly string[];
+  /** Work needed before each deadline of this calendar (0 = none). */
+  deadlineWorkMin?: number;
+  /** At most this much work per day for one deadline. */
+  deadlineDailyMaxMin?: number;
 }
 
 /** Title as compared for hiding: trimmed, spaces collapsed, lower case. */
@@ -100,6 +104,8 @@ export interface ScheduleData {
   overrides: readonly OverrideInput[];
   tasks: readonly TaskInput[];
   entries?: readonly EntryInput[];
+  /** Deadline event ids marked done: no more work placed for them. */
+  doneDeadlines?: readonly string[];
 }
 
 export type BlockKind = 'event' | 'focus' | 'practicas' | 'task' | 'buffer' | 'free';
@@ -115,6 +121,8 @@ export interface Block {
   taskId?: string;
   /** Set on occurrences of a manual calendar entry. */
   entryId?: string;
+  /** Set on work blocks placed before a deadline (the deadline event id). */
+  deadlineId?: string;
   moved?: boolean;
   autoPlaced?: boolean;
 }
@@ -478,6 +486,95 @@ export function buildDay(
   };
 }
 
+export interface DeadlineWork {
+  eventId: string;
+  title: string;
+  dueMs: number;
+  calendarId: string;
+  totalMin: number;
+  plannedMin: number;
+  /** Work that found no free time in the 60 days before the deadline. */
+  missingMin: number;
+  done: boolean;
+}
+
+export interface WorkPlan {
+  blocks: Block[];
+  deadlines: Map<string, DeadlineWork>;
+}
+
+/** How far back from a deadline work may be placed. */
+export const DEADLINE_LOOKBACK_DAYS = 60;
+/** Smallest piece of deadline work (unless less than that is left for the day). */
+export const WORK_CHUNK_MIN = 30;
+const workCache = new WeakMap<ScheduleData, WeakMap<ScheduleSettings, WorkPlan>>();
+
+/**
+ * Work before deadlines. For each deadline of a calendar with
+ * deadlineWorkMin > 0 (earliest deadline first), the work goes into free time
+ * starting the day before the deadline and going back one day at a time, at
+ * most deadlineDailyMaxMin per day, earliest free time first inside a day.
+ * It does not depend on the current time, so the plan stays put day after
+ * day and blocks in the past count as done.
+ */
+export function deadlineWork(data: ScheduleData, s: ScheduleSettings): WorkPlan {
+  let bySettings = workCache.get(data);
+  const cached = bySettings?.get(s);
+  if (cached) return cached;
+
+  const calendars = new Map(data.calendars.map((c) => [c.id, c]));
+  const done = new Set(data.doneDeadlines ?? []);
+  const deadlines = applyOverrides(data.events, data.overrides)
+    .active.filter((e) => {
+      const cal = calendars.get(e.calendarId);
+      return e.eventType === 'deadline' && (cal?.deadlineWorkMin ?? 0) > 0 && !isHidden(cal, e.title);
+    })
+    .sort((a, b) => a.startMs - b.startMs || a.id.localeCompare(b.id));
+
+  const blocks: Block[] = [];
+  const summary = new Map<string, DeadlineWork>();
+  for (const e of deadlines) {
+    const cal = calendars.get(e.calendarId)!;
+    const totalMin = cal.deadlineWorkMin!;
+    const base = { eventId: e.id, title: e.title, dueMs: e.startMs, calendarId: e.calendarId, totalMin };
+    if (done.has(e.id)) {
+      summary.set(e.id, { ...base, plannedMin: 0, missingMin: 0, done: true });
+      continue;
+    }
+    const dailyMax = Math.max(cal.deadlineDailyMaxMin ?? 120, 15);
+    const due = localDate(e.startMs, s.tz);
+    let left = totalMin;
+    for (let i = 1; i <= DEADLINE_LOOKBACK_DAYS && left > 0; i++) {
+      let dayLeft = Math.min(dailyMax, left);
+      for (const f of buildDay(addDays(due, -i), data, s, 0, blocks).free) {
+        if (dayLeft <= 0) break;
+        const chunk = Math.min(minutes(f.endMs - f.startMs), dayLeft);
+        if (chunk < Math.min(WORK_CHUNK_MIN, dayLeft)) continue;
+        blocks.push({
+          kind: 'focus',
+          startMs: f.startMs,
+          endMs: f.startMs + chunk * MINUTE,
+          title: e.title,
+          color: cal.color,
+          calendarId: e.calendarId,
+          deadlineId: e.id,
+        });
+        dayLeft -= chunk;
+        left -= chunk;
+      }
+    }
+    summary.set(e.id, { ...base, plannedMin: totalMin - left, missingMin: left, done: false });
+  }
+
+  const plan = { blocks, deadlines: summary };
+  if (!bySettings) {
+    bySettings = new WeakMap();
+    workCache.set(data, bySettings);
+  }
+  bySettings.set(s, plan);
+  return plan;
+}
+
 export interface Placement {
   taskId: string;
   /** One block, two when the task was split, none when nothing fits. */
@@ -565,10 +662,11 @@ export function autoPlace(data: ScheduleData, s: ScheduleSettings, nowMs: number
     return limit > nowMs ? limit : endOfDay(today, days, s.tz);
   };
 
+  const work = deadlineWork(data, s).blocks;
   const lastDay = Math.max(...pending.map((t) => Math.ceil((limitOf(t) - nowMs) / (DAY_MIN * MINUTE)) + 1));
   const intervals: Interval[] = [];
   for (let i = 0; i <= lastDay; i++) {
-    for (const f of buildDay(addDays(today, i), data, s, nowMs).free) {
+    for (const f of buildDay(addDays(today, i), data, s, nowMs, work).free) {
       const startMs = Math.ceil(Math.max(f.startMs, nowMs) / STEP_MS) * STEP_MS;
       if (f.endMs > startMs) intervals.push({ startMs, endMs: f.endMs });
     }
@@ -616,7 +714,7 @@ export function autoPlace(data: ScheduleData, s: ScheduleSettings, nowMs: number
 /** Day plan including auto-placed tasks. */
 export function planDay(date: string, data: ScheduleData, s: ScheduleSettings, nowMs: number): { plan: DayPlan; placements: Placement[] } {
   const placements = autoPlace(data, s, nowMs);
-  const extra = placements.flatMap((p) => p.blocks);
+  const extra = [...deadlineWork(data, s).blocks, ...placements.flatMap((p) => p.blocks)];
   return { plan: buildDay(date, data, s, nowMs, extra), placements };
 }
 
@@ -639,7 +737,7 @@ export interface WeekPlan {
 export function planWeek(date: string, data: ScheduleData, s: ScheduleSettings, nowMs: number): WeekPlan {
   const start = weekStart(date);
   const placements = autoPlace(data, s, nowMs);
-  const extra = placements.flatMap((p) => p.blocks);
+  const extra = [...deadlineWork(data, s).blocks, ...placements.flatMap((p) => p.blocks)];
   const days = Array.from({ length: 7 }, (_, i) => buildDay(addDays(start, i), data, s, nowMs, extra));
   let longestFree: Block | null = null;
   for (const d of days) {

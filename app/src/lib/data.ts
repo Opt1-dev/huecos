@@ -45,6 +45,9 @@ export interface CalendarRow {
   source: 'feed' | 'manual';
   /** Event titles hidden in Huecos (days off, holidays…). */
   hidden_titles: string[];
+  /** Work needed before each deadline of this calendar (0 = none). */
+  deadline_work_min: number;
+  deadline_daily_max_min: number;
   feed_host: string | null;
   last_synced_at: string | null;
   last_error: string | null;
@@ -106,19 +109,23 @@ interface Snapshot {
   events: EventRow[];
   /** Missing in snapshots saved before manual calendars existed. */
   entries?: EntryRow[];
+  /** Missing in snapshots saved before deadline work existed. */
+  doneDeadlines?: string[];
   overrides: OverrideRow[];
   tasks: TaskRow[];
   blockedDays: BlockedDayRow[];
 }
 
 const CAL_COLUMNS =
-  'id, name, role, color, buffer_before_min, buffer_after_min, counts_busy, sort_order, source, hidden_titles, feed_host, last_synced_at, last_error';
+  'id, name, role, color, buffer_before_min, buffer_after_min, counts_busy, sort_order, source, hidden_titles, deadline_work_min, deadline_daily_max_min, feed_host, last_synced_at, last_error';
 const ENTRY_COLUMNS = 'id, calendar_id, title, start_min, end_min, weekdays, start_date, end_date';
 
 export const settingsRow = signal<SettingsRow | null>(null);
 export const calendars = signal<CalendarRow[]>([]);
 export const events = signal<EventRow[]>([]);
 export const entries = signal<EntryRow[]>([]);
+/** Ids of deadline events marked done. */
+export const doneDeadlines = signal<string[]>([]);
 export const overrides = signal<OverrideRow[]>([]);
 export const tasks = signal<TaskRow[]>([]);
 export const blockedDays = signal<BlockedDayRow[]>([]);
@@ -150,6 +157,7 @@ async function saveSnapshot(userId: string): Promise<void> {
     calendars: calendars.value,
     events: events.value,
     entries: entries.value,
+    doneDeadlines: doneDeadlines.value,
     overrides: overrides.value,
     tasks: tasks.value,
     blockedDays: blockedDays.value,
@@ -169,6 +177,7 @@ async function loadSnapshot(userId: string): Promise<boolean> {
     calendars.value = snap.calendars;
     events.value = snap.events;
     entries.value = snap.entries ?? [];
+    doneDeadlines.value = snap.doneDeadlines ?? [];
     overrides.value = snap.overrides;
     tasks.value = snap.tasks;
     blockedDays.value = snap.blockedDays;
@@ -204,6 +213,12 @@ async function loadTable<T>(name: 'tasks' | 'overrides'): Promise<T[]> {
   return (data ?? []) as T[];
 }
 
+async function loadDoneDeadlines(): Promise<string[]> {
+  const { data, error } = await supabase.from('deadline_done').select('event_id');
+  fail(error);
+  return ((data ?? []) as { event_id: string }[]).map((r) => r.event_id);
+}
+
 async function loadEntries(): Promise<EntryRow[]> {
   const { data, error } = await supabase.from('calendar_entries').select(ENTRY_COLUMNS).order('start_min');
   fail(error);
@@ -222,11 +237,12 @@ export async function loadAll(): Promise<void> {
     fail(se);
     const tz = (s as SettingsRow | null)?.timezone ?? 'Europe/Madrid';
     const range = eventRange(tz);
-    const [cals, evs, ens, ovs, tks, bds] = await Promise.all([
+    const [cals, evs, ens, dds, ovs, tks, bds] = await Promise.all([
       supabase.from('calendars').select(CAL_COLUMNS).order('sort_order').order('created_at'),
       supabase.from('events').select('id, calendar_id, title, start_at, end_at, all_day, event_type, status')
         .lt('start_at', range.to).gt('end_at', range.from).order('start_at').limit(5000),
       supabase.from('calendar_entries').select(ENTRY_COLUMNS).order('start_min'),
+      supabase.from('deadline_done').select('event_id'),
       loadTable<OverrideRow>('overrides'),
       loadTable<TaskRow>('tasks'),
       supabase.from('blocked_days').select('date, kind').order('date'),
@@ -234,11 +250,13 @@ export async function loadAll(): Promise<void> {
     fail(cals.error);
     fail(evs.error);
     fail(ens.error);
+    fail(dds.error);
     fail(bds.error);
     settingsRow.value = s as SettingsRow | null;
     calendars.value = (cals.data ?? []) as CalendarRow[];
     events.value = (evs.data ?? []) as EventRow[];
     entries.value = (ens.data ?? []) as EntryRow[];
+    doneDeadlines.value = ((dds.data ?? []) as { event_id: string }[]).map((r) => r.event_id);
     overrides.value = ovs;
     tasks.value = tks;
     blockedDays.value = (bds.data ?? []) as BlockedDayRow[];
@@ -256,11 +274,12 @@ let channel: RealtimeChannel | null = null;
 export function startRealtime(): void {
   const userId = session.value?.user.id;
   if (!userId || channel || demoMode.value) return;
-  const refresh = async (table: 'tasks' | 'overrides' | 'calendar_entries') => {
+  const refresh = async (table: 'tasks' | 'overrides' | 'calendar_entries' | 'deadline_done') => {
     try {
       if (table === 'tasks') tasks.value = await loadTable<TaskRow>('tasks');
       else if (table === 'overrides') overrides.value = await loadTable<OverrideRow>('overrides');
-      else entries.value = await loadEntries();
+      else if (table === 'calendar_entries') entries.value = await loadEntries();
+      else doneDeadlines.value = await loadDoneDeadlines();
       await saveSnapshot(userId);
     } catch {
       /* next full load will catch up */
@@ -272,6 +291,9 @@ export function startRealtime(): void {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'overrides', filter: `user_id=eq.${userId}` }, () => void refresh('overrides'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_entries', filter: `user_id=eq.${userId}` }, () =>
       void refresh('calendar_entries'),
+    )
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'deadline_done', filter: `user_id=eq.${userId}` }, () =>
+      void refresh('deadline_done'),
     )
     .subscribe();
 }
@@ -319,7 +341,10 @@ export const scheduleData = computed<ScheduleData>(() => ({
     countsBusy: c.counts_busy,
     // Older offline snapshots have no hidden_titles.
     hiddenTitles: c.hidden_titles ?? [],
+    deadlineWorkMin: c.deadline_work_min ?? 0,
+    deadlineDailyMaxMin: c.deadline_daily_max_min ?? 120,
   })),
+  doneDeadlines: doneDeadlines.value,
   events: events.value.map((e) => ({
     id: e.id,
     calendarId: e.calendar_id,
@@ -428,7 +453,9 @@ export async function addCalendar(input: CalendarInput & { source: CalendarRow['
   return data as CalendarRow;
 }
 
-export async function updateCalendar(id: string, patch: Partial<CalendarInput>): Promise<void> {
+export type CalendarPatch = Partial<CalendarInput & Pick<CalendarRow, 'deadline_work_min' | 'deadline_daily_max_min'>>;
+
+export async function updateCalendar(id: string, patch: CalendarPatch): Promise<void> {
   const { data, error } = await supabase.from('calendars').update(patch).eq('id', id).select(CAL_COLUMNS).single();
   fail(error);
   calendars.value = calendars.value.map((c) => (c.id === id ? (data as CalendarRow) : c));
@@ -461,6 +488,22 @@ export async function calendarTitles(calendarId: string): Promise<TitleRow[]> {
     .limit(5000);
   fail(error);
   return (data ?? []) as TitleRow[];
+}
+
+/** Mark a deadline done (its remaining work is no longer placed) or not done. */
+export async function setDeadlineDone(eventId: string, done: boolean): Promise<void> {
+  if (demoMode.value) {
+    doneDeadlines.value = done ? [...doneDeadlines.value, eventId] : doneDeadlines.value.filter((id) => id !== eventId);
+    return;
+  }
+  const { error } = done
+    ? await supabase.from('deadline_done').upsert({ event_id: eventId }, { onConflict: 'event_id', ignoreDuplicates: true })
+    : await supabase.from('deadline_done').delete().eq('event_id', eventId);
+  fail(error);
+  doneDeadlines.value = done
+    ? [...new Set([...doneDeadlines.value, eventId])]
+    : doneDeadlines.value.filter((id) => id !== eventId);
+  await afterWrite();
 }
 
 export type EntryFields = Omit<EntryRow, 'id' | 'calendar_id'>;
