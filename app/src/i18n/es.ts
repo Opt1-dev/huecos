@@ -1,0 +1,25 @@
+import type { Dictionary } from './fr';
+
+export const es: Dictionary = {
+  'app.name': 'Huecos',
+  'app.tagline': 'Tu tiempo libre real, tus tareas, tus entregas y tus notas.',
+  'tabs.label': 'Secciones',
+  'tabs.day': 'Mi día',
+  'tabs.rendus': 'Entregas y notas',
+  'tabs.notes': 'Notas',
+  'tabs.settings': 'Ajustes',
+  'login.title': 'Iniciar sesión',
+  'login.email': 'Correo electrónico',
+  'login.submit': 'Recibir un enlace de acceso',
+  'login.sending': 'Enviando…',
+  'login.sent': 'Enlace enviado. Abre el correo en este dispositivo para entrar.',
+  'login.inviteOnly': 'Huecos funciona por invitación. Si tu correo no está invitado, no se enviará ningún enlace.',
+  'login.error': 'No se pudo enviar el enlace: {message}',
+  'session.signOut': 'Cerrar sesión',
+  'settings.language': 'Idioma',
+  'status.offline': 'Sin conexión',
+  'status.lastSynced': 'Última sincronización {time}',
+  'placeholder.comingSoon': 'Esta sección llegará en una próxima fase.',
+  'update.available': 'Hay una nueva versión disponible.',
+  'update.reload': 'Actualizar',
+};
