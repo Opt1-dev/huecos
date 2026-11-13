@@ -201,6 +201,8 @@ export const es: Dictionary = {
   'deadline.markDone': 'Marcar como hecha',
   'deadline.markTodo': 'Volver a pendiente',
   'deadline.open': 'Ver la entrega {title}',
+  'cal.summaryManual': 'Manual · {n} horario(s)',
+  'timeline.break': 'Descanso',
   'role.practicas': 'Prácticas',
   'role.work': 'Trabajo',
   'role.school': 'Escuela',

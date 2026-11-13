@@ -155,7 +155,7 @@ function GeneralSettings() {
 }
 
 // ---------------------------------------------------------------------------
-function CalendarItem({ cal }: { cal: CalendarRow }) {
+function CalendarItem({ cal, defaultOpen = false }: { cal: CalendarRow; defaultOpen?: boolean }) {
   const tr = t.value;
   const tz = scheduleSettings.value.tz;
   const { busy, message, setMessage, run } = useBusy();
@@ -163,6 +163,14 @@ function CalendarItem({ cal }: { cal: CalendarRow }) {
   const [candidates, setCandidates] = useState<RepeatedTitle[] | null>(null);
   const save = (patch: CalendarPatch) => void run(() => updateCalendar(cal.id, patch));
   const hidden = cal.hidden_titles ?? [];
+  const summary = [
+    tr(`role.${cal.role}` as MessageKey),
+    cal.source === 'manual'
+      ? tr('cal.summaryManual', { n: entries.value.filter((e) => e.calendar_id === cal.id).length })
+      : cal.feed_host
+        ? tr('cal.feedHost', { host: cal.feed_host })
+        : tr('cal.noFeed'),
+  ].join(' · ');
 
   /** Opens the "hide repeated events?" dialog when some titles repeat. */
   async function lookForRepeats(): Promise<number> {
@@ -173,173 +181,187 @@ function CalendarItem({ cal }: { cal: CalendarRow }) {
 
   return (
     <li class="cal-item" style={{ '--cal': cal.color }}>
-      <div class="grid-form">
-        <label class="field">
-          <span>{tr('cal.name')}</span>
-          <input
-            value={cal.name}
-            maxLength={60}
-            onChange={(e) => save({ name: (e.target as HTMLInputElement).value.trim() || cal.name })}
-          />
-        </label>
-        <label class="field">
-          <span>{tr('cal.role')}</span>
-          <select value={cal.role} onChange={(e) => save({ role: (e.target as HTMLSelectElement).value as Role })}>
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {tr(`role.${r}` as MessageKey)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label class="field">
-          <span>{tr('cal.color')}</span>
-          <input type="color" value={cal.color} onChange={(e) => save({ color: (e.target as HTMLInputElement).value })} />
-        </label>
-        <label class="field">
-          <span>{tr('cal.before')}</span>
-          <input type="number" inputMode="numeric" min={0} max={240} value={cal.buffer_before_min} onChange={(e) => save({ buffer_before_min: numberValue(e) })} />
-        </label>
-        <label class="field">
-          <span>{tr('cal.after')}</span>
-          <input type="number" inputMode="numeric" min={0} max={240} value={cal.buffer_after_min} onChange={(e) => save({ buffer_after_min: numberValue(e) })} />
-        </label>
-        <label class="check">
-          <input type="checkbox" checked={cal.counts_busy} onChange={(e) => save({ counts_busy: (e.target as HTMLInputElement).checked })} />
-          <span>{tr('cal.countsBusy')}</span>
-        </label>
-        {cal.source === 'feed' && (
-          <>
+      <details class="cal-details" open={defaultOpen}>
+        <summary class="cal-summary">
+          <span class="cal-dot" aria-hidden="true" />
+          <span class="cal-summary-text">
+            <strong>{cal.name}</strong>
+            <span class="muted small">{summary}</span>
+          </span>
+          {cal.last_error && (
+            <span class="badge warn" title={tr('cal.lastError', { code: cal.last_error })}>⚠ {cal.last_error}</span>
+          )}
+        </summary>
+        <div class="cal-body stack-tight">
+          <div class="grid-form">
             <label class="field">
-              <span>{tr('cal.work')}</span>
+              <span>{tr('cal.name')}</span>
               <input
-                type="number"
-                inputMode="decimal"
-                min={0}
-                max={100}
-                step={0.5}
-                value={(cal.deadline_work_min ?? 0) / 60}
-                onChange={(e) => save({ deadline_work_min: hoursToMinutes(e, 0, 6000) })}
+                value={cal.name}
+                maxLength={60}
+                onChange={(e) => save({ name: (e.target as HTMLInputElement).value.trim() || cal.name })}
               />
             </label>
             <label class="field">
-              <span>{tr('cal.workMax')}</span>
-              <input
-                type="number"
-                inputMode="decimal"
-                min={0.25}
-                max={16}
-                step={0.5}
-                value={(cal.deadline_daily_max_min ?? 120) / 60}
-                disabled={!cal.deadline_work_min}
-                onChange={(e) => save({ deadline_daily_max_min: hoursToMinutes(e, 15, 960) })}
-              />
-            </label>
-            <p class="muted small span-all">{tr('cal.workHelp')}</p>
-          </>
-        )}
-      </div>
-
-      {cal.source === 'manual' ? (
-        <ManualEntries cal={cal} />
-      ) : (
-        <>
-          <form
-            class="feed-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void run(async () => {
-                const { error } = await saveFeed(cal.id, feed);
-                if (error) {
-                  setMessage({ ok: false, text: feedErrorMessage(error) });
-                  return null;
-                }
-                setFeed('');
-                await syncNow();
-                await lookForRepeats();
-                return tr('cal.feedOk', { host: calendars.value.find((c) => c.id === cal.id)?.feed_host ?? '' });
-              });
-            }}
-          >
-            <label class="field">
-              <span>{tr('cal.feed')}</span>
-              <input
-                type="password"
-                autocomplete="off"
-                spellcheck={false}
-                placeholder={cal.feed_host ? tr('cal.feedHost', { host: cal.feed_host }) : 'https://…/basic.ics'}
-                value={feed}
-                onInput={(e) => setFeed((e.target as HTMLInputElement).value)}
-                required
-              />
-            </label>
-            <button class="btn" type="submit" disabled={busy || !online.value || !feed.trim()}>
-              {busy ? tr('cal.feedSaving') : tr('cal.feedSave')}
-            </button>
-          </form>
-          <p class="muted small">
-            {cal.feed_host ? tr('cal.feedHost', { host: cal.feed_host }) : tr('cal.noFeed')}
-            {cal.last_synced_at && ` · ${tr('cal.lastSync', { time: timeLabel(Date.parse(cal.last_synced_at), tz) })}`}
-            {cal.last_error && <span class="error"> · {tr('cal.lastError', { code: cal.last_error })}</span>}
-          </p>
-          <p class="muted small">{tr('cal.feedHelp')}</p>
-          <div class="stack-tight">
-            <h3 class="small">{tr('hide.hidden')}</h3>
-            {hidden.length === 0 ? (
-              <p class="muted small">{tr('hide.noneHidden')}</p>
-            ) : (
-              <ul class="chip-list">
-                {hidden.map((h) => (
-                  <li key={h} class="chip">
-                    <span>{h}</span>
-                    <button
-                      type="button"
-                      class="chip-x"
-                      aria-label={tr('hide.show', { title: h })}
-                      title={tr('hide.show', { title: h })}
-                      disabled={busy || !online.value}
-                      onClick={() => void run(() => setHiddenTitles(cal.id, hidden.filter((x) => x !== h)))}
-                    >
-                      ×
-                    </button>
-                  </li>
+              <span>{tr('cal.role')}</span>
+              <select value={cal.role} onChange={(e) => save({ role: (e.target as HTMLSelectElement).value as Role })}>
+                {ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {tr(`role.${r}` as MessageKey)}
+                  </option>
                 ))}
-              </ul>
-            )}
-            {cal.feed_host && (
-              <button
-                type="button"
-                class="btn"
-                disabled={busy || !online.value}
-                onClick={() => void run(async () => ((await lookForRepeats()) > 0 ? null : tr('hide.nothing')))}
-              >
-                {busy ? tr('hide.searching') : tr('hide.search')}
-              </button>
+              </select>
+            </label>
+            <label class="field">
+              <span>{tr('cal.color')}</span>
+              <input type="color" value={cal.color} onChange={(e) => save({ color: (e.target as HTMLInputElement).value })} />
+            </label>
+            <label class="field">
+              <span>{tr('cal.before')}</span>
+              <input type="number" inputMode="numeric" min={0} max={240} value={cal.buffer_before_min} onChange={(e) => save({ buffer_before_min: numberValue(e) })} />
+            </label>
+            <label class="field">
+              <span>{tr('cal.after')}</span>
+              <input type="number" inputMode="numeric" min={0} max={240} value={cal.buffer_after_min} onChange={(e) => save({ buffer_after_min: numberValue(e) })} />
+            </label>
+            <label class="check">
+              <input type="checkbox" checked={cal.counts_busy} onChange={(e) => save({ counts_busy: (e.target as HTMLInputElement).checked })} />
+              <span>{tr('cal.countsBusy')}</span>
+            </label>
+            {cal.source === 'feed' && (
+              <>
+                <label class="field">
+                  <span>{tr('cal.work')}</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={100}
+                    step={0.5}
+                    value={(cal.deadline_work_min ?? 0) / 60}
+                    onChange={(e) => save({ deadline_work_min: hoursToMinutes(e, 0, 6000) })}
+                  />
+                </label>
+                <label class="field">
+                  <span>{tr('cal.workMax')}</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0.25}
+                    max={16}
+                    step={0.5}
+                    value={(cal.deadline_daily_max_min ?? 120) / 60}
+                    disabled={!cal.deadline_work_min}
+                    onChange={(e) => save({ deadline_daily_max_min: hoursToMinutes(e, 15, 960) })}
+                  />
+                </label>
+                <p class="muted small span-all">{tr('cal.workHelp')}</p>
+              </>
             )}
           </div>
-          {candidates && (
-            <HideRepeatsDialog
-              cal={cal}
-              candidates={candidates}
-              onClose={(n) => {
-                setCandidates(null);
-                if (n > 0) setMessage({ ok: true, text: tr('hide.done', { n }) });
-              }}
-            />
+
+          {cal.source === 'manual' ? (
+            <ManualEntries cal={cal} />
+          ) : (
+            <>
+              <form
+                class="feed-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void run(async () => {
+                    const { error } = await saveFeed(cal.id, feed);
+                    if (error) {
+                      setMessage({ ok: false, text: feedErrorMessage(error) });
+                      return null;
+                    }
+                    setFeed('');
+                    await syncNow();
+                    await lookForRepeats();
+                    return tr('cal.feedOk', { host: calendars.value.find((c) => c.id === cal.id)?.feed_host ?? '' });
+                  });
+                }}
+              >
+                <label class="field">
+                  <span>{tr('cal.feed')}</span>
+                  <input
+                    type="password"
+                    autocomplete="off"
+                    spellcheck={false}
+                    placeholder={cal.feed_host ? tr('cal.feedHost', { host: cal.feed_host }) : 'https://…/basic.ics'}
+                    value={feed}
+                    onInput={(e) => setFeed((e.target as HTMLInputElement).value)}
+                    required
+                  />
+                </label>
+                <button class="btn" type="submit" disabled={busy || !online.value || !feed.trim()}>
+                  {busy ? tr('cal.feedSaving') : tr('cal.feedSave')}
+                </button>
+              </form>
+              <p class="muted small">
+                {cal.feed_host ? tr('cal.feedHost', { host: cal.feed_host }) : tr('cal.noFeed')}
+                {cal.last_synced_at && ` · ${tr('cal.lastSync', { time: timeLabel(Date.parse(cal.last_synced_at), tz) })}`}
+                {cal.last_error && <span class="error"> · {tr('cal.lastError', { code: cal.last_error })}</span>}
+              </p>
+              <p class="muted small">{tr('cal.feedHelp')}</p>
+              <div class="stack-tight">
+                <h3 class="small">{tr('hide.hidden')}</h3>
+                {hidden.length === 0 ? (
+                  <p class="muted small">{tr('hide.noneHidden')}</p>
+                ) : (
+                  <ul class="chip-list">
+                    {hidden.map((h) => (
+                      <li key={h} class="chip">
+                        <span>{h}</span>
+                        <button
+                          type="button"
+                          class="chip-x"
+                          aria-label={tr('hide.show', { title: h })}
+                          title={tr('hide.show', { title: h })}
+                          disabled={busy || !online.value}
+                          onClick={() => void run(() => setHiddenTitles(cal.id, hidden.filter((x) => x !== h)))}
+                        >
+                          ×
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {cal.feed_host && (
+                  <button
+                    type="button"
+                    class="btn"
+                    disabled={busy || !online.value}
+                    onClick={() => void run(async () => ((await lookForRepeats()) > 0 ? null : tr('hide.nothing')))}
+                  >
+                    {busy ? tr('hide.searching') : tr('hide.search')}
+                  </button>
+                )}
+              </div>
+              {candidates && (
+                <HideRepeatsDialog
+                  cal={cal}
+                  candidates={candidates}
+                  onClose={(n) => {
+                    setCandidates(null);
+                    if (n > 0) setMessage({ ok: true, text: tr('hide.done', { n }) });
+                  }}
+                />
+              )}
+            </>
           )}
-        </>
-      )}
-      <Status message={message} />
-      <button
-        type="button"
-        class="btn danger"
-        disabled={busy || !online.value}
-        onClick={() => {
-          if (confirm(tr('cal.confirmDelete', { name: cal.name }))) void run(() => deleteCalendar(cal.id));
-        }}
-      >
-        {tr('common.delete')}
-      </button>
+          <Status message={message} />
+          <button
+            type="button"
+            class="btn danger"
+            disabled={busy || !online.value}
+            onClick={() => {
+              if (confirm(tr('cal.confirmDelete', { name: cal.name }))) void run(() => deleteCalendar(cal.id));
+            }}
+          >
+            {tr('common.delete')}
+          </button>
+        </div>
+      </details>
     </li>
   );
 }
@@ -428,6 +450,8 @@ function CalendarsSettings() {
   const [name, setName] = useState('');
   const [role, setRole] = useState<Role>('work');
   const [source, setSource] = useState<CalendarRow['source']>('feed');
+  /** The calendar just added opens, ready for its link or entries. */
+  const [added, setAdded] = useState<string | null>(null);
 
   return (
     <section class="card stack" aria-labelledby="cal-h">
@@ -437,50 +461,53 @@ function CalendarsSettings() {
       ) : (
         <ul class="cal-list">
           {calendars.value.map((c) => (
-            <CalendarItem key={c.id} cal={c} />
+            <CalendarItem key={c.id} cal={c} defaultOpen={c.id === added} />
           ))}
         </ul>
       )}
-      <form
-        class="grid-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void run(async () => {
-            await addCalendar({ name: name.trim(), role, source, ...ROLE_DEFAULTS[role] });
-            setName('');
-          });
-        }}
-      >
-        <h3 class="span-all">{tr('cal.add')}</h3>
-        <label class="field">
-          <span>{tr('cal.name')}</span>
-          <input value={name} maxLength={60} required onInput={(e) => setName((e.target as HTMLInputElement).value)} />
-        </label>
-        <label class="field">
-          <span>{tr('cal.role')}</span>
-          <select value={role} onChange={(e) => setRole((e.target as HTMLSelectElement).value as Role)}>
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {tr(`role.${r}` as MessageKey)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <fieldset class="span-all stack-tight">
-          <legend>{tr('cal.source')}</legend>
-          <label class="check">
-            <input type="radio" name="cal-source" checked={source === 'feed'} onChange={() => setSource('feed')} />
-            <span>{tr('cal.sourceFeed')}</span>
+      <details class="cal-add" open={calendars.value.length === 0}>
+        <summary>+ {tr('cal.add')}</summary>
+        <form
+          class="grid-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void run(async () => {
+              const cal = await addCalendar({ name: name.trim(), role, source, ...ROLE_DEFAULTS[role] });
+              setAdded(cal.id);
+              setName('');
+            });
+          }}
+        >
+          <label class="field">
+            <span>{tr('cal.name')}</span>
+            <input value={name} maxLength={60} required onInput={(e) => setName((e.target as HTMLInputElement).value)} />
           </label>
-          <label class="check">
-            <input type="radio" name="cal-source" checked={source === 'manual'} onChange={() => setSource('manual')} />
-            <span>{tr('cal.sourceManual')}</span>
+          <label class="field">
+            <span>{tr('cal.role')}</span>
+            <select value={role} onChange={(e) => setRole((e.target as HTMLSelectElement).value as Role)}>
+              {ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {tr(`role.${r}` as MessageKey)}
+                </option>
+              ))}
+            </select>
           </label>
-        </fieldset>
-        <button class="btn primary" type="submit" disabled={busy || !online.value || !name.trim()}>
-          {tr('cal.add')}
-        </button>
-      </form>
+          <fieldset class="span-all stack-tight">
+            <legend>{tr('cal.source')}</legend>
+            <label class="check">
+              <input type="radio" name="cal-source" checked={source === 'feed'} onChange={() => setSource('feed')} />
+              <span>{tr('cal.sourceFeed')}</span>
+            </label>
+            <label class="check">
+              <input type="radio" name="cal-source" checked={source === 'manual'} onChange={() => setSource('manual')} />
+              <span>{tr('cal.sourceManual')}</span>
+            </label>
+          </fieldset>
+          <button class="btn primary" type="submit" disabled={busy || !online.value || !name.trim()}>
+            {tr('cal.add')}
+          </button>
+        </form>
+      </details>
       <Status message={message} />
     </section>
   );

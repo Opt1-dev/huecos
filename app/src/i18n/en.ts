@@ -201,6 +201,8 @@ export const en: Dictionary = {
   'deadline.markDone': 'Mark as done',
   'deadline.markTodo': 'Mark as not done',
   'deadline.open': 'Open deadline {title}',
+  'cal.summaryManual': 'Manual · {n} entries',
+  'timeline.break': 'Break',
   'role.practicas': 'Prácticas',
   'role.work': 'Work',
   'role.school': 'School',

@@ -673,3 +673,92 @@ button.block.busy {
   text-decoration: line-through;
   color: var(--muted);
 }
+
+/* Collapsible calendars */
+.cal-item {
+  padding: 0;
+  gap: 0;
+}
+.cal-summary,
+.cal-add > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 12px;
+  cursor: pointer;
+  list-style: none;
+  border-radius: 10px;
+}
+.cal-summary::-webkit-details-marker,
+.cal-add > summary::-webkit-details-marker {
+  display: none;
+}
+.cal-summary::after {
+  content: "";
+  margin-left: auto;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 0.15s;
+}
+.cal-details[open] > .cal-summary::after {
+  transform: rotate(-135deg);
+}
+.cal-summary:hover,
+.cal-add > summary:hover {
+  background: var(--surface-2);
+}
+.cal-summary:focus-visible,
+.cal-add > summary:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.cal-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--cal);
+}
+.cal-summary-text {
+  display: grid;
+  min-width: 0;
+}
+.cal-summary-text > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-summary .badge {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-body {
+  padding: 4px 12px 12px;
+  gap: 8px;
+}
+.cal-add {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+.cal-add > summary {
+  font-weight: 600;
+}
+.cal-add > form {
+  padding: 4px 12px 12px;
+}
+
+/* Break inside a long work block */
+.block.busy.break {
+  background: repeating-linear-gradient(135deg, var(--surface-2) 0 6px, transparent 6px 12px);
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  font-size: 0.7rem;
+}

@@ -95,7 +95,7 @@ export function Timeline({ plan, tz, onSelect, compact = false, label }: Props) 
         const p = position(plan, b, scale);
         if (p.height <= 0) return null;
         const label = [
-          b.deadlineId ? tr('timeline.work') : b.kind === 'focus' ? tr('timeline.study') : null,
+          b.kind === 'break' ? tr('timeline.break') : b.deadlineId ? tr('timeline.work') : b.kind === 'focus' ? tr('timeline.study') : null,
           b.title,
           b.moved ? `(${tr('timeline.moved')})` : null,
           b.autoPlaced ? `(${tr('timeline.auto')})` : null,

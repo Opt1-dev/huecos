@@ -571,3 +571,42 @@ describe('work before deadlines', () => {
     expect(placements[0]!.blocks.map(where)).toEqual(['2026-11-16 10:00-11:00']);
   });
 });
+
+describe('breaks in long work blocks', () => {
+  const DUE = '2026-11-17';
+  const calsWith = (work: number, max: number) =>
+    CALS.map((c) => (c.id === 'cesur' ? { ...c, deadlineWorkMin: work, deadlineDailyMaxMin: max } : c));
+  const due = ev('cesur', at(DUE, '23:59'), at(DUE, '23:59'), { eventType: 'deadline', title: 'Projet' });
+  const show = (b: { kind: string; startMs: number; endMs: number }) => `${b.kind} ${hm(b.startMs)}-${hm(b.endMs)}`;
+
+  it('puts a 20 min break in the middle of a block over 4 h', () => {
+    const plan = deadlineWork({ ...data([due]), calendars: calsWith(360, 360) }, settings());
+    expect(plan.blocks.map(show)).toEqual(['focus 08:00-11:00', 'break 11:00-11:20', 'focus 11:20-14:20']);
+    expect([...plan.deadlines.values()][0]).toMatchObject({ plannedMin: 360, missingMin: 0 });
+  });
+
+  it('keeps blocks of exactly 4 h in one piece', () => {
+    const plan = deadlineWork({ ...data([due]), calendars: calsWith(240, 240) }, settings());
+    expect(plan.blocks.map(show)).toEqual(['focus 08:00-12:00']);
+  });
+
+  it('makes room for the break when the free slot is just long enough for the work', () => {
+    // 16th: free 08:00-13:00 only (5 h). 5 h of work: 4 h 40 there (with the break), 20 min the day before.
+    const busy = ev('other', at('2026-11-16', '13:00'), at('2026-11-16', '23:59'));
+    const plan = deadlineWork({ ...data([due, busy]), calendars: calsWith(300, 300) }, settings());
+    expect(plan.blocks.map((b) => `${localDate(b.startMs, TZ)} ${show(b)}`)).toEqual([
+      '2026-11-16 focus 08:00-10:20',
+      '2026-11-16 break 10:20-10:40',
+      '2026-11-16 focus 10:40-13:00',
+      '2026-11-15 focus 08:00-08:20',
+    ]);
+  });
+
+  it('the break is busy time: nothing else is placed in it', () => {
+    const now = at('2026-11-16', '07:00');
+    const d = { ...data([due], [task('a', { durationMin: 15 })]), calendars: calsWith(360, 360) };
+    const { plan, placements } = planDay('2026-11-16', d, settings(), now);
+    expect(plan.busy.some((b) => b.kind === 'break')).toBe(true);
+    expect(placements[0]!.blocks.map((b) => hm(b.startMs))).toEqual(['14:20']);
+  });
+});
