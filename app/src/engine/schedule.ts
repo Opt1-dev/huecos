@@ -108,7 +108,7 @@ export interface ScheduleData {
   doneDeadlines?: readonly string[];
 }
 
-export type BlockKind = 'event' | 'focus' | 'practicas' | 'task' | 'buffer' | 'free';
+export type BlockKind = 'event' | 'focus' | 'practicas' | 'task' | 'buffer' | 'break' | 'free';
 
 export interface Block {
   kind: BlockKind;
@@ -507,6 +507,9 @@ export interface WorkPlan {
 export const DEADLINE_LOOKBACK_DAYS = 60;
 /** Smallest piece of deadline work (unless less than that is left for the day). */
 export const WORK_CHUNK_MIN = 30;
+/** A work block longer than this gets a break in the middle. */
+export const LONG_BLOCK_MIN = 240;
+export const BREAK_MIN = 20;
 const workCache = new WeakMap<ScheduleData, WeakMap<ScheduleSettings, WorkPlan>>();
 
 /**
@@ -548,17 +551,32 @@ export function deadlineWork(data: ScheduleData, s: ScheduleSettings): WorkPlan 
       let dayLeft = Math.min(dailyMax, left);
       for (const f of buildDay(addDays(due, -i), data, s, 0, blocks).free) {
         if (dayLeft <= 0) break;
-        const chunk = Math.min(minutes(f.endMs - f.startMs), dayLeft);
+        const room = minutes(f.endMs - f.startMs);
+        let chunk = Math.min(room, dayLeft);
+        // Over 4 h: keep room for a 20-min break in the middle.
+        if (chunk > LONG_BLOCK_MIN) chunk = Math.min(dayLeft, room - BREAK_MIN);
         if (chunk < Math.min(WORK_CHUNK_MIN, dayLeft)) continue;
-        blocks.push({
+        const work = (startMs: number, min: number): Block => ({
           kind: 'focus',
-          startMs: f.startMs,
-          endMs: f.startMs + chunk * MINUTE,
+          startMs,
+          endMs: startMs + min * MINUTE,
           title: e.title,
           color: cal.color,
           calendarId: e.calendarId,
           deadlineId: e.id,
         });
+        if (chunk > LONG_BLOCK_MIN) {
+          const first = Math.ceil(chunk / 2 / 5) * 5;
+          const pauseStart = f.startMs + first * MINUTE;
+          const pauseEnd = pauseStart + BREAK_MIN * MINUTE;
+          blocks.push(
+            work(f.startMs, first),
+            { kind: 'break', startMs: pauseStart, endMs: pauseEnd, title: '', calendarId: e.calendarId },
+            work(pauseEnd, chunk - first),
+          );
+        } else {
+          blocks.push(work(f.startMs, chunk));
+        }
         dayLeft -= chunk;
         left -= chunk;
       }

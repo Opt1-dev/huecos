@@ -200,6 +200,8 @@ export const fr = {
   'deadline.markDone': 'Marquer comme faite',
   'deadline.markTodo': 'Remettre à faire',
   'deadline.open': 'Voir l’échéance {title}',
+  'cal.summaryManual': 'Manuel · {n} créneau(x)',
+  'timeline.break': 'Pause',
   'role.practicas': 'Prácticas',
   'role.work': 'Travail',
   'role.school': 'École',
