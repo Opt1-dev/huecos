@@ -68,11 +68,25 @@ export interface ScheduleSettings {
   blockedDays: ReadonlyMap<string, BlockedKind>;
 }
 
+/** An entry of a manual calendar, repeated on some weekdays between two dates. */
+export interface EntryInput {
+  id: string;
+  calendarId: string;
+  title: string;
+  startMin: number;
+  endMin: number;
+  /** ISO weekdays, 1 = Monday … 7 = Sunday. */
+  weekdays: readonly number[];
+  startDate: string;
+  endDate: string | null;
+}
+
 export interface ScheduleData {
   calendars: readonly CalendarInfo[];
   events: readonly EventInput[];
   overrides: readonly OverrideInput[];
   tasks: readonly TaskInput[];
+  entries?: readonly EntryInput[];
 }
 
 export type BlockKind = 'event' | 'focus' | 'practicas' | 'task' | 'buffer' | 'free';
@@ -86,6 +100,8 @@ export interface Block {
   calendarId?: string;
   eventId?: string;
   taskId?: string;
+  /** Set on occurrences of a manual calendar entry. */
+  entryId?: string;
   moved?: boolean;
   autoPlaced?: boolean;
 }
@@ -253,6 +269,15 @@ interface BusySource {
 }
 
 /** Everything that occupies time around `date`, with its buffers. */
+/** Whether a manual entry takes place on a local date. */
+export function entryOccurs(entry: EntryInput, date: string): boolean {
+  return (
+    date >= entry.startDate &&
+    (entry.endDate === null || date <= entry.endDate) &&
+    entry.weekdays.includes(isoWeekday(date))
+  );
+}
+
 function busySources(date: string, data: ScheduleData, s: ScheduleSettings, extraTasks: readonly Block[]): {
   sources: BusySource[];
   notes: Block[];
@@ -291,6 +316,33 @@ function busySources(date: string, data: ScheduleData, s: ScheduleSettings, extr
       bufferBeforeMin: practicasRole ? s.practicas.bufferBeforeMin : (cal?.bufferBeforeMin ?? 0),
       bufferAfterMin: practicasRole ? s.practicas.bufferAfterMin : (cal?.bufferAfterMin ?? 0),
     });
+  }
+
+  // Manual calendar entries of the previous, current and next day (buffers can cross midnight).
+  for (const d of [addDays(date, -1), date, addDays(date, 1)]) {
+    for (const entry of data.entries ?? []) {
+      if (!entryOccurs(entry, d)) continue;
+      const cal = calendars.get(entry.calendarId);
+      const block: Block = {
+        kind: 'event',
+        startMs: zonedToUtc(d, entry.startMin, s.tz),
+        endMs: zonedToUtc(d, entry.endMin, s.tz),
+        title: entry.title,
+        color: cal?.color,
+        calendarId: entry.calendarId,
+        entryId: entry.id,
+      };
+      if (cal?.countsBusy === false) {
+        if (d === date) notes.push(block);
+        continue;
+      }
+      const practicasRole = cal?.role === 'practicas';
+      sources.push({
+        block,
+        bufferBeforeMin: practicasRole ? s.practicas.bufferBeforeMin : (cal?.bufferBeforeMin ?? 0),
+        bufferAfterMin: practicasRole ? s.practicas.bufferAfterMin : (cal?.bufferAfterMin ?? 0),
+      });
+    }
   }
 
   // Generated prácticas for the previous, current and next day (buffers can cross midnight).

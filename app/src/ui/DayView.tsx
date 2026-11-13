@@ -6,6 +6,7 @@ import { planDay, type Block } from '../engine/schedule';
 import { addDays, localDate } from '../../../supabase/functions/_shared/tz.ts';
 import { Timeline } from './Timeline';
 import { EventDialog } from './EventDialog';
+import { EntryDialog } from './EntryDialog';
 import { TasksPanel } from './TasksPanel';
 import { WeekView } from './WeekView';
 import { dayLabel, durationLabel, timeLabel } from './format';
@@ -142,7 +143,12 @@ export function DayView() {
         <TasksPanel date={date} tz={s.tz} placements={placements} />
       </div>
 
-      {selected && <EventDialog block={selected} tz={s.tz} onClose={() => setSelected(null)} />}
+      {selected &&
+        (selected.entryId ? (
+          <EntryDialog entryId={selected.entryId} tz={s.tz} onClose={() => setSelected(null)} />
+        ) : (
+          <EventDialog block={selected} tz={s.tz} onClose={() => setSelected(null)} />
+        ))}
     </div>
   );
 }

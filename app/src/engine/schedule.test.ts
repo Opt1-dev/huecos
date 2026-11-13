@@ -3,12 +3,14 @@ import { zonedToUtc } from '../../../supabase/functions/_shared/tz.ts';
 import {
   autoPlace,
   buildDay,
+  entryOccurs,
   mergeIntervals,
   planDay,
   planWeek,
   weekStart,
   practicasHours,
   type CalendarInfo,
+  type EntryInput,
   type EventInput,
   type ScheduleData,
   type ScheduleSettings,
@@ -362,5 +364,63 @@ describe('week plan', () => {
     const week = planWeek('2027-03-28', data(), settings(), MORNING);
     expect(week.days[6]!.date).toBe('2027-03-28');
     expect(slots(week.days[6]!)).toEqual(['08:00-00:00']);
+  });
+});
+
+describe('manual calendar entries', () => {
+  const entry = (extra: Partial<EntryInput> = {}): EntryInput => ({
+    id: 'r1',
+    calendarId: 'gym',
+    title: 'Gym',
+    startMin: 19 * 60,
+    endMin: 20 * 60 + 30,
+    weekdays: [1, 3, 5],
+    startDate: '2026-11-16',
+    endDate: null,
+    ...extra,
+  });
+  const withEntries = (entries: EntryInput[]): ScheduleData => ({ ...data(), entries });
+
+  it('occurs only on its weekdays, inside its dates', () => {
+    const e = entry({ endDate: '2026-11-27' });
+    expect(entryOccurs(e, '2026-11-16')).toBe(true); // Monday
+    expect(entryOccurs(e, '2026-11-17')).toBe(false); // Tuesday
+    expect(entryOccurs(e, '2026-11-13')).toBe(false); // before the start
+    expect(entryOccurs(e, '2026-11-27')).toBe(true); // last day (Friday)
+    expect(entryOccurs(e, '2026-11-30')).toBe(false); // after the end
+  });
+
+  it('blocks its time with the calendar travel buffers', () => {
+    // gym calendar: 30 min before and after.
+    const plan = buildDay(D, withEntries([entry()]), settings(), MORNING);
+    expect(plan.busy.map((b) => `${b.title} ${hm(b.startMs)}-${hm(b.endMs)}`)).toEqual(['Gym 19:00-20:30']);
+    expect(plan.busy[0]!.entryId).toBe('r1');
+    expect(slots(plan)).toEqual(['08:00-18:30', '21:00-00:00']);
+  });
+
+  it('leaves the other weekdays free', () => {
+    const plan = buildDay('2026-11-17', withEntries([entry()]), settings(), MORNING);
+    expect(plan.busy).toEqual([]);
+    expect(slots(plan)).toEqual(['08:00-00:00']);
+  });
+
+  it('every day of the week, from one date', () => {
+    const daily = entry({ weekdays: [1, 2, 3, 4, 5, 6, 7], startMin: 600, endMin: 660, calendarId: 'other' });
+    const week = planWeek(D, withEntries([daily]), settings(), MORNING);
+    expect(week.days.map((d) => d.busyTotalMin)).toEqual([60, 60, 60, 60, 60, 60, 60]);
+  });
+
+  it('a single date when start and end are the same day', () => {
+    const once = entry({ weekdays: [3], startDate: D, endDate: D, calendarId: 'other' });
+    expect(buildDay(D, withEntries([once]), settings(), MORNING).busy).toHaveLength(1);
+    expect(buildDay('2026-11-25', withEntries([once]), settings(), MORNING).busy).toHaveLength(0);
+  });
+
+  it('a calendar that does not count as busy shows the entry as a note', () => {
+    const cals = [...CALS, cal('info', 'other', 0, 0, false)];
+    const d: ScheduleData = { ...data(), calendars: cals, entries: [entry({ calendarId: 'info' })] };
+    const plan = buildDay(D, d, settings(), MORNING);
+    expect(plan.busy).toEqual([]);
+    expect(plan.notes.map((n) => n.title)).toEqual(['Gym']);
   });
 });

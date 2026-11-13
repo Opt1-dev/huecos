@@ -5,6 +5,7 @@ import { planWeek, weekStart, type Block } from '../engine/schedule';
 import { addDays, localDate, MINUTE } from '../../../supabase/functions/_shared/tz.ts';
 import { hourMarks, Timeline, WEEK_PX_PER_MIN } from './Timeline';
 import { EventDialog } from './EventDialog';
+import { EntryDialog } from './EntryDialog';
 import { dayLabel, durationLabel, shortDate, timeLabel, weekdayDay } from './format';
 import { selectedDate, setViewMode, SyncBar, useNow } from './planner';
 
@@ -164,7 +165,12 @@ export function WeekView() {
         </div>
       </section>
 
-      {selected && <EventDialog block={selected} tz={s.tz} onClose={() => setSelected(null)} />}
+      {selected &&
+        (selected.entryId ? (
+          <EntryDialog entryId={selected.entryId} tz={s.tz} onClose={() => setSelected(null)} />
+        ) : (
+          <EventDialog block={selected} tz={s.tz} onClose={() => setSelected(null)} />
+        ))}
     </div>
   );
 }
