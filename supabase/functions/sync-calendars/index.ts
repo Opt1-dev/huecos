@@ -4,7 +4,7 @@
 // (Authorization: Bearer <session JWT>, only their calendars).
 import { parseIcs, type ParsedEvent } from '../_shared/ics.ts';
 import { FeedFetchError, safeFetchText } from '../_shared/net.ts';
-import { adminClient, constantTimeEqual, corsHeaders, json, requestUserId } from '../_shared/http.ts';
+import { adminClient, corsHeaders, json, requestUserId } from '../_shared/http.ts';
 
 const DAY = 86_400_000;
 const PAST_DAYS = 7;
@@ -88,11 +88,13 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
 
-  const cronSecret = Deno.env.get('HUECOS_SYNC_CRON_SECRET');
   const cronHeader = req.headers.get('x-cron-secret');
   let userId: string | null = null;
 
-  if (cronSecret && cronHeader && constantTimeEqual(cronHeader, cronSecret)) {
+  if (cronHeader) {
+    // pg_cron call: the secret lives only in Vault and is checked there.
+    const { data: ok, error: checkError } = await admin.rpc('check_sync_cron_secret', { p_secret: cronHeader });
+    if (checkError || ok !== true) return json({ error: 'unauthorized' }, 401);
     userId = null; // every user
   } else {
     userId = await requestUserId(req, admin);

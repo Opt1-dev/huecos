@@ -76,14 +76,12 @@ Nothing secret is committed. Create these once.
    insert into public.invitations (email, role) values ('you@example.com', 'admin');
    ```
    Admins can then add or remove invitations; members cannot see the list.
-4. **Calendar sync every 15 minutes** (once). Generate a long random value (for example `openssl rand -hex 32`), then:
-   - Edge Functions → Secrets: add `HUECOS_SYNC_CRON_SECRET` with that value;
-   - SQL editor (the value never goes into the repo):
-     ```sql
-     select vault.create_secret('https://<project-ref>.supabase.co', 'huecos_project_url');
-     select vault.create_secret('<the same random value>', 'huecos_sync_cron_secret');
-     ```
-   The `huecos-sync-calendars` pg_cron job (created by a migration) does nothing until both Vault secrets exist.
+4. **Calendar sync every 15 minutes** (once, SQL editor). The secret is generated inside the database and never leaves it: pg_cron sends it to `sync-calendars`, which checks it with `public.check_sync_cron_secret()` (service role only).
+   ```sql
+   select vault.create_secret('https://<project-ref>.supabase.co', 'huecos_project_url');
+   select vault.create_secret(encode(extensions.gen_random_bytes(32), 'hex'), 'huecos_sync_cron_secret');
+   ```
+   The `huecos-sync-calendars` pg_cron job (created by a migration) does nothing until both Vault secrets exist. To rotate the secret: `select vault.update_secret(id, encode(extensions.gen_random_bytes(32), 'hex')) from vault.secrets where name = 'huecos_sync_cron_secret';`
 
 ### GitHub Pages
 
