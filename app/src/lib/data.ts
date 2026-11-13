@@ -25,6 +25,7 @@ export interface SettingsRow {
   practicas_start_min: number;
   practicas_end_min: number;
   practicas_total_hours: number;
+  practicas_hour_factor: number;
   practicas_buffer_before_min: number;
   practicas_buffer_after_min: number;
   last_synced_at: string | null;
@@ -265,6 +266,7 @@ export const scheduleSettings = computed<ScheduleSettings>(() => {
       bufferBeforeMin: s?.practicas_buffer_before_min ?? 45,
       bufferAfterMin: s?.practicas_buffer_after_min ?? 75,
       totalHours: s?.practicas_total_hours ?? 500,
+      hourFactor: Number(s?.practicas_hour_factor ?? 1),
     },
     blockedDays: new Map(blockedDays.value.map((b) => [b.date, b.kind])),
   };

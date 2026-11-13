@@ -18,7 +18,7 @@ import {
 } from '../lib/data';
 import { online } from '../lib/session';
 import { parseBlockedDays } from '../lib/blocked';
-import { practicasHours, type Role } from '../engine/schedule';
+import { loggedPerDay, practicasHours, type Role } from '../engine/schedule';
 import { localDate } from '../../../supabase/functions/_shared/tz.ts';
 import { LanguagePicker } from './LanguagePicker';
 import { dayLabel, errorText, feedErrorMessage, minutesToInput, parseTimeInput, timeLabel, weekdayShort } from './format';
@@ -296,13 +296,15 @@ function PracticasSettings() {
   const s = settingsRow.value;
   const { busy, message, run } = useBusy();
   const [startDate, setStartDate] = useState(s?.practicas_start ?? '2026-10-01');
-  const [endDate, setEndDate] = useState(s?.practicas_end ?? '2027-03-01');
+  // Empty end date = computed from the target hours.
+  const [endDate, setEndDate] = useState(s?.practicas_end ?? '');
   const [days, setDays] = useState<number[]>(s?.practicas_weekdays ?? [1, 2, 3, 4, 5]);
   const [from, setFrom] = useState(minutesToInput(s?.practicas_start_min ?? 540));
   const [to, setTo] = useState(minutesToInput(s?.practicas_end_min ?? 780));
   const [before, setBefore] = useState(s?.practicas_buffer_before_min ?? 45);
   const [after, setAfter] = useState(s?.practicas_buffer_after_min ?? 75);
   const [total, setTotal] = useState(s?.practicas_total_hours ?? 500);
+  const [factor, setFactor] = useState(String(s?.practicas_hour_factor ?? 1));
   if (!s?.module_practicas) return null;
 
   const hours = practicasHours(scheduleSettings.value, localDate(Date.now(), scheduleSettings.value.tz));
@@ -313,14 +315,24 @@ function PracticasSettings() {
         <progress max={hours.target} value={Math.min(hours.done, hours.target)} aria-label={tr('pr.title')} />{' '}
         <span class="small">{tr('pr.progress', { done: hours.done, target: hours.target, planned: hours.planned })}</span>
       </p>
+      {hours.end && (
+        <p class="small">
+          <strong>{tr(s.practicas_end ? 'pr.fixedEnd' : 'pr.projectedEnd', { date: dayLabel(hours.end) })}</strong>
+          {s.practicas_end && hours.planned < hours.target && (
+            <span class="warn-text"> · {tr('pr.short', { missing: hours.target - hours.planned })}</span>
+          )}
+        </p>
+      )}
       <form
         class="grid-form"
         onSubmit={(e) => {
           e.preventDefault();
           const a = parseTimeInput(from);
           const b = parseTimeInput(to);
+          const f = Number(factor.replace(',', '.'));
           void run(async () => {
             if (a === null || b === null || a >= b) throw new Error(`${from}–${to}`);
+            if (!Number.isFinite(f) || f < 0.5 || f > 3) throw new Error(factor);
             await updateSettings({
               practicas_start: startDate || null,
               practicas_end: endDate || null,
@@ -330,6 +342,7 @@ function PracticasSettings() {
               practicas_buffer_before_min: before,
               practicas_buffer_after_min: after,
               practicas_total_hours: total,
+              practicas_hour_factor: Math.round(f * 100) / 100,
             });
             return tr('common.saved');
           });
@@ -341,7 +354,15 @@ function PracticasSettings() {
         </label>
         <label class="field">
           <span>{tr('pr.end')}</span>
-          <input type="date" value={endDate} onInput={(e) => setEndDate((e.target as HTMLInputElement).value)} />
+          <input
+            type="date"
+            value={endDate}
+            aria-describedby="pr-end-help"
+            onInput={(e) => setEndDate((e.target as HTMLInputElement).value)}
+          />
+          <span id="pr-end-help" class="muted small">
+            {tr('pr.endHelp', { target: total })}
+          </span>
         </label>
         <fieldset class="span-all weekdays">
           <legend>{tr('pr.days')}</legend>
@@ -377,6 +398,20 @@ function PracticasSettings() {
         <label class="field">
           <span>{tr('pr.total')}</span>
           <input type="number" inputMode="numeric" min={1} max={5000} value={total} onInput={(e) => setTotal(numberValue(e))} />
+        </label>
+        <label class="field">
+          <span>{tr('pr.factor')}</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            pattern="[0-9]+([.,][0-9]{1,2})?"
+            value={factor}
+            aria-describedby="pr-factor-help"
+            onInput={(e) => setFactor((e.target as HTMLInputElement).value)}
+          />
+          <span id="pr-factor-help" class="muted small">
+            {tr('pr.factorHelp', { worked: (s.practicas_end_min - s.practicas_start_min) / 60, logged: loggedPerDay(scheduleSettings.value) })}
+          </span>
         </label>
         <button class="btn primary" type="submit" disabled={busy || !online.value}>
           {tr('common.save')}
