@@ -107,6 +107,8 @@ Merging a pull request into `main` runs `deploy.yml`:
 | `public.settings` | One row per user: language, time zone, free-time window, minimum slot, modules, prácticas settings, last sync | Owner only (read/update) |
 | `public.calendars` | A user's calendars: name, role, colour, buffers before/after, counts as busy, source (`feed` or `manual`), hidden event titles, work per deadline and max per day, feed host, last sync/error | Owner; `feed_secret_id` can't be written by the browser; `source` is set once; a manual calendar never has a feed |
 | `public.deadline_done` | Deadline events marked done (no more work placed) | Owner, only for their own events |
+| `public.subjects` | Subjects: name (unique per user, case-insensitive), colour slot 0–7 | Owner |
+| `public.rendus` | Assignments: optional deadline event (one rendu per event, kept unlinked if the event goes), subject (can't be deleted while used), title, due date, state `todo|done|submitted|graded`, grade 0–10, note | Owner; event and subject must be theirs. Triggers keep it in step with `deadline_done`: a rendu past "todo" marks its deadline done, back to "todo" or deleted unmarks it; marking a deadline done moves its rendu to "done" (creating it, prefix removed, local due date) and unmarking moves "done" back to "todo" |
 | `public.calendar_entries` | Entries of manual calendars: title, start/end time, ISO weekdays, from/until dates (same date = once). Expanded by the app, not stored per occurrence | Owner, only into their own manual calendars |
 | `public.events` | Synced occurrences, unique on `(calendar_id, uid, start_at)` | Owner reads; only `sync-calendars` writes |
 | `public.overrides` | Move or cancel an event in Huecos only | Owner, only on their own events |
@@ -118,6 +120,14 @@ Merging a pull request into `main` runs `deploy.yml`:
 | `vault.secrets` | Encrypted calendar feed URLs and the cron secret | Service role only |
 
 A user's settings row is created automatically at sign-up; an invitation with role `admin` also makes the new user an admin. Realtime is enabled on `tasks` and `overrides`.
+
+## Rendus et notes
+
+- **À rendre (14 prochains jours):** every deadline event ("Vencimiento de …", prefix removed, or any event of a *Deadlines* calendar) up to 14 days ahead, late ones included (red), plus rendus typed by hand that are still to do. The same deadline in two calendars shows once; identical deadlines in one calendar are numbered (1/3)… The subject is pre-filled when its name appears in the title (case and accents ignored, whole words). Changing the subject, state or note saves a real rendu linked to the event; once past "À faire" it moves to *Mes rendus*.
+- **Mes rendus:** "Fait, non rendu", "Rendu, en attente de correction" (with a /10 grade box, typed, comma or dot: a valid grade moves it to "Corrigé") and "Corrigé" (collapsed by default, remembered per device). × deletes.
+- **Notes par matière:** grade (0–10) by due date, one line per subject, dashed reference lines at 7.5 and 5, tooltip on hover/focus, legend with each subject's average. Colours are the 8 validated categorical slots (light and dark).
+- **Nouveau rendu** and **Matières** (add, rename, colour, delete only when unused).
+- Finishing a rendu frees its deadline's booked work time, and marking a deadline done in *Ma journée* moves its rendu to "Fait".
 
 ## Calendar sync
 
@@ -159,7 +169,7 @@ These rules drive the free-time computation in `app/src/engine/schedule.ts`, a p
 
 - **Phase 0:** repository, CI/CD, Supabase foundation (invites, settings), app shell with sign-in and languages.
 - **Phase 1:** calendars and feed settings, `sync-calendars` Edge Function + pg_cron, scheduling engine, "Ma journée".
-- **Phase 2:** "Rendus et notes" + import from the "Ma journée" dashboard.
+- **Phase 2:** "Rendus et notes" (done; no import from "Ma journée", by choice).
 - **Phase 3:** "Notes".
 - **Phase 4:** Outlook corrections block (Microsoft Graph, per user).
 - **Phase 5:** PWA polish (install, offline, icons) and deployment.
