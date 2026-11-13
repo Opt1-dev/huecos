@@ -638,3 +638,21 @@ button.block.busy {
 .btn.small-btn.danger {
   justify-self: auto;
 }
+
+/* Hide repeated events */
+.hide-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  max-height: min(50vh, 360px);
+  overflow-y: auto;
+}
+.hide-list .check {
+  align-items: flex-start;
+  padding-top: 10px;
+}
+.hide-list .check > span {
+  overflow-wrap: anywhere;
+}

@@ -472,3 +472,20 @@ describe('manual calendar entries', () => {
     expect(plan.notes.map((n) => n.title)).toEqual(['Gym']);
   });
 });
+
+describe('hidden titles', () => {
+  it('drops events whose title is hidden for their calendar, whatever the case or spaces', () => {
+    const cals = CALS.map((c) => (c.id === 'amorino' ? { ...c, hiddenTitles: ['día libre'] } : c));
+    const d: ScheduleData = {
+      ...data([
+        ev('amorino', at(D, '08:00'), at(D, '23:59'), { title: '  Día   LIBRE ' }),
+        ev('amorino', at(D, '19:00'), at(D, '21:00'), { title: 'Turno' }),
+        ev('other', at(D, '10:00'), at(D, '11:00'), { title: 'Día libre' }),
+      ]),
+      calendars: cals,
+    };
+    const plan = buildDay(D, d, settings(), MORNING);
+    expect(plan.busy.map((b) => b.title)).toEqual(['Día libre', 'Turno']);
+    expect(plan.busy[0]!.calendarId).toBe('other');
+  });
+});

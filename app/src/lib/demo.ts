@@ -37,11 +37,11 @@ export function loadDemo(): void {
     { id: 'danse-2', calendar_id: 'danse', title: 'Répétition', start_min: 11 * 60, end_min: 13 * 60, weekdays: [6, 7], start_date: addDays(today, -3), end_date: addDays(today, 30) },
   ];
   calendars.value = [
-    { id: 'amorino', name: 'Amorino', role: 'work', color: '#b45309', buffer_before_min: 75, buffer_after_min: 0, counts_busy: true, sort_order: 0, source: 'feed', feed_host: 'combo.example', last_synced_at: new Date().toISOString(), last_error: null },
-    { id: 'gym', name: 'Gymnasio', role: 'gym', color: '#047857', buffer_before_min: 30, buffer_after_min: 30, counts_busy: true, sort_order: 1, source: 'feed', feed_host: 'calendar.google.com', last_synced_at: new Date().toISOString(), last_error: null },
-    { id: 'cesur', name: 'CESUR', role: 'school', color: '#6d28d9', buffer_before_min: 0, buffer_after_min: 0, counts_busy: true, sort_order: 2, source: 'feed', feed_host: 'calendar.google.com', last_synced_at: null, last_error: 'http_404' },
-    { id: 'main', name: 'Principal', role: 'main', color: '#1d4ed8', buffer_before_min: 0, buffer_after_min: 0, counts_busy: true, sort_order: 3, source: 'feed', feed_host: null, last_synced_at: null, last_error: null },
-    { id: 'danse', name: 'Cours de danse', role: 'activity', color: '#be185d', buffer_before_min: 20, buffer_after_min: 20, counts_busy: true, sort_order: 4, source: 'manual', feed_host: null, last_synced_at: null, last_error: null },
+    { id: 'amorino', name: 'Amorino', role: 'work', color: '#b45309', buffer_before_min: 75, buffer_after_min: 0, counts_busy: true, sort_order: 0, source: 'feed', hidden_titles: [], feed_host: 'combo.example', last_synced_at: new Date().toISOString(), last_error: null },
+    { id: 'gym', name: 'Gymnasio', role: 'gym', color: '#047857', buffer_before_min: 30, buffer_after_min: 30, counts_busy: true, sort_order: 1, source: 'feed', hidden_titles: [], feed_host: 'calendar.google.com', last_synced_at: new Date().toISOString(), last_error: null },
+    { id: 'cesur', name: 'CESUR', role: 'school', color: '#6d28d9', buffer_before_min: 0, buffer_after_min: 0, counts_busy: true, sort_order: 2, source: 'feed', hidden_titles: [], feed_host: 'calendar.google.com', last_synced_at: null, last_error: 'http_404' },
+    { id: 'main', name: 'Principal', role: 'main', color: '#1d4ed8', buffer_before_min: 0, buffer_after_min: 0, counts_busy: true, sort_order: 3, source: 'feed', hidden_titles: [], feed_host: null, last_synced_at: null, last_error: null },
+    { id: 'danse', name: 'Cours de danse', role: 'activity', color: '#be185d', buffer_before_min: 20, buffer_after_min: 20, counts_busy: true, sort_order: 4, source: 'manual', hidden_titles: [], feed_host: null, last_synced_at: null, last_error: null },
   ];
   const ev = (id: string, cal: string, title: string, d: string, s: number, e: number, extra: Partial<EventRow> = {}): EventRow => ({
     id, calendar_id: cal, title, start_at: iso(d, s), end_at: iso(d, e), all_day: false, event_type: 'event', status: 'confirmed', ...extra,
@@ -52,7 +52,10 @@ export function loadDemo(): void {
     ev(`am${i}`, 'amorino', 'Turno Amorino', d, 1140, 1440 + 30),
     ev(`focus${i}`, 'main', 'Entrega DAW UT4', d, 1050, 1110, { event_type: 'focus' }),
     ev(`dl${i}`, 'cesur', 'Vencimiento de Tarea UT4 – Formularios', d, 1439, 1439, { event_type: 'deadline' }),
-  ]);
+  ]).concat(
+    // Days off exported by the shift app as big timed blocks.
+    [3, 4, 10].map((n) => ev(`off${n}`, 'amorino', 'Día libre', addDays(today, n), 480, 1440)),
+  );
   overrides.value = [];
   tasks.value = [
     { id: 't1', title: 'Préparer la présentation de projet', quadrant: 1, day: null, start_min: null, duration_min: 60, done: false, auto_placed: false, created_at: '2026-11-10T10:00:00Z' },

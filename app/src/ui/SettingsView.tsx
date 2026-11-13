@@ -5,6 +5,7 @@ import {
   addCalendar,
   addEntry,
   blockedDays,
+  calendarTitles,
   calendars,
   deleteBlockedDay,
   deleteCalendar,
@@ -12,6 +13,7 @@ import {
   entries,
   saveFeed,
   scheduleSettings,
+  setHiddenTitles,
   settingsRow,
   syncNow,
   updateCalendar,
@@ -22,6 +24,8 @@ import {
 } from '../lib/data';
 import { online } from '../lib/session';
 import { parseBlockedDays } from '../lib/blocked';
+import { repeatedTitles, type RepeatedTitle } from '../lib/repeats';
+import { HideRepeatsDialog } from './HideRepeatsDialog';
 import { loggedPerDay, practicasHours, type Role } from '../engine/schedule';
 import { localDate } from '../../../supabase/functions/_shared/tz.ts';
 import { LanguagePicker } from './LanguagePicker';
@@ -149,7 +153,16 @@ function CalendarItem({ cal }: { cal: CalendarRow }) {
   const tz = scheduleSettings.value.tz;
   const { busy, message, setMessage, run } = useBusy();
   const [feed, setFeed] = useState('');
+  const [candidates, setCandidates] = useState<RepeatedTitle[] | null>(null);
   const save = (patch: Partial<CalendarInput>) => void run(() => updateCalendar(cal.id, patch));
+  const hidden = cal.hidden_titles ?? [];
+
+  /** Opens the "hide repeated events?" dialog when some titles repeat. */
+  async function lookForRepeats(): Promise<number> {
+    const found = repeatedTitles(await calendarTitles(cal.id), hidden);
+    if (found.length > 0) setCandidates(found);
+    return found.length;
+  }
 
   return (
     <li class="cal-item" style={{ '--cal': cal.color }}>
@@ -206,6 +219,7 @@ function CalendarItem({ cal }: { cal: CalendarRow }) {
                 }
                 setFeed('');
                 await syncNow();
+                await lookForRepeats();
                 return tr('cal.feedOk', { host: calendars.value.find((c) => c.id === cal.id)?.feed_host ?? '' });
               });
             }}
@@ -232,6 +246,50 @@ function CalendarItem({ cal }: { cal: CalendarRow }) {
             {cal.last_error && <span class="error"> · {tr('cal.lastError', { code: cal.last_error })}</span>}
           </p>
           <p class="muted small">{tr('cal.feedHelp')}</p>
+          <div class="stack-tight">
+            <h3 class="small">{tr('hide.hidden')}</h3>
+            {hidden.length === 0 ? (
+              <p class="muted small">{tr('hide.noneHidden')}</p>
+            ) : (
+              <ul class="chip-list">
+                {hidden.map((h) => (
+                  <li key={h} class="chip">
+                    <span>{h}</span>
+                    <button
+                      type="button"
+                      class="chip-x"
+                      aria-label={tr('hide.show', { title: h })}
+                      title={tr('hide.show', { title: h })}
+                      disabled={busy || !online.value}
+                      onClick={() => void run(() => setHiddenTitles(cal.id, hidden.filter((x) => x !== h)))}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {cal.feed_host && (
+              <button
+                type="button"
+                class="btn"
+                disabled={busy || !online.value}
+                onClick={() => void run(async () => ((await lookForRepeats()) > 0 ? null : tr('hide.nothing')))}
+              >
+                {busy ? tr('hide.searching') : tr('hide.search')}
+              </button>
+            )}
+          </div>
+          {candidates && (
+            <HideRepeatsDialog
+              cal={cal}
+              candidates={candidates}
+              onClose={(n) => {
+                setCandidates(null);
+                if (n > 0) setMessage({ ok: true, text: tr('hide.done', { n }) });
+              }}
+            />
+          )}
         </>
       )}
       <Status message={message} />

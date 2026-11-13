@@ -13,6 +13,19 @@ export interface CalendarInfo {
   bufferBeforeMin: number;
   bufferAfterMin: number;
   countsBusy: boolean;
+  /** Event titles hidden in Huecos (compared with normalizeTitle). */
+  hiddenTitles?: readonly string[];
+}
+
+/** Title as compared for hiding: trimmed, spaces collapsed, lower case. */
+export function normalizeTitle(title: string): string {
+  return title.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+}
+
+function isHidden(cal: CalendarInfo | undefined, title: string): boolean {
+  if (!cal?.hiddenTitles?.length) return false;
+  const t = normalizeTitle(title);
+  return cal.hiddenTitles.some((h) => normalizeTitle(h) === t);
 }
 
 export interface EventInput {
@@ -294,6 +307,7 @@ function busySources(date: string, data: ScheduleData, s: ScheduleSettings, extr
   for (const e of active) {
     if (!overlaps({ startMs: e.startMs, endMs: Math.max(e.endMs, e.startMs + 1) }, around)) continue;
     const cal = calendars.get(e.calendarId);
+    if (isHidden(cal, e.title)) continue;
     const block: Block = {
       kind: e.eventType === 'focus' ? 'focus' : 'event',
       startMs: e.startMs,
@@ -376,7 +390,7 @@ function busySources(date: string, data: ScheduleData, s: ScheduleSettings, extr
       (n) => localDate(n.startMs, s.tz) <= date && date <= localDate(Math.max(n.startMs, n.endMs - 1), s.tz),
     ),
     cancelled: cancelled
-      .filter((e) => localDate(e.startMs, s.tz) === date)
+      .filter((e) => localDate(e.startMs, s.tz) === date && !isHidden(calendars.get(e.calendarId), e.title))
       .map((e) => ({
         kind: 'event' as const,
         startMs: e.startMs,
