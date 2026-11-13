@@ -22,7 +22,7 @@ export function loadDemo(): void {
     module_outlook: false,
     module_practicas: true,
     practicas_start: '2026-10-01',
-    practicas_end: '2027-03-01',
+    practicas_end: null,
     practicas_weekdays: [1, 2, 3, 4, 5],
     practicas_start_min: 540,
     practicas_end_min: 780,

@@ -263,6 +263,40 @@ describe('auto-placement', () => {
   });
 });
 
+describe('automatic prácticas end date', () => {
+  const auto = (blocked: [string, 'non_school' | 'holiday'][] = []) => {
+    const s = withPracticas(blocked);
+    s.practicas.end = null;
+    return s;
+  };
+
+  it('ends on the day the 500 h target is reached (125 days of 4 h)', () => {
+    const s = auto();
+    const h = practicasHours(s, '2026-10-01');
+    expect(h.planned).toBe(500);
+    // 1 Oct 2026 + 125 weekdays → Wednesday 24 Mar 2027.
+    expect(h.end).toBe('2027-03-24');
+    expect(buildDay('2027-03-24', data(), s, MORNING).busy.map((b) => b.kind)).toEqual(['practicas']);
+    expect(buildDay('2027-03-25', data(), s, MORNING).busy).toEqual([]);
+  });
+
+  it('a blocked day pushes the end one working day later', () => {
+    expect(practicasHours(auto([['2026-12-08', 'holiday']]), '2026-10-01').end).toBe('2027-03-25');
+  });
+
+  it('a fixed end date still wins', () => {
+    const s = withPracticas();
+    // 1 Oct 2026 → 1 Mar 2027 has 108 weekdays: 432 h, short of 500.
+    expect(practicasHours(s, '2026-10-01')).toMatchObject({ end: '2027-03-01', planned: 432 });
+  });
+
+  it('a target that is not a multiple of the daily hours shortens the last day in the count', () => {
+    const s = auto();
+    s.practicas.totalHours = 10;
+    expect(practicasHours(s, '2026-10-01')).toMatchObject({ planned: 10, end: '2026-10-05' });
+  });
+});
+
 describe('practicasHours', () => {
   it('counts 4 h per prácticas day before today and skips blocked days', () => {
     const s = withPracticas([['2026-10-12', 'holiday']]);

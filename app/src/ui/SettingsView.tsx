@@ -296,7 +296,8 @@ function PracticasSettings() {
   const s = settingsRow.value;
   const { busy, message, run } = useBusy();
   const [startDate, setStartDate] = useState(s?.practicas_start ?? '2026-10-01');
-  const [endDate, setEndDate] = useState(s?.practicas_end ?? '2027-03-01');
+  // Empty end date = computed from the target hours.
+  const [endDate, setEndDate] = useState(s?.practicas_end ?? '');
   const [days, setDays] = useState<number[]>(s?.practicas_weekdays ?? [1, 2, 3, 4, 5]);
   const [from, setFrom] = useState(minutesToInput(s?.practicas_start_min ?? 540));
   const [to, setTo] = useState(minutesToInput(s?.practicas_end_min ?? 780));
@@ -313,6 +314,14 @@ function PracticasSettings() {
         <progress max={hours.target} value={Math.min(hours.done, hours.target)} aria-label={tr('pr.title')} />{' '}
         <span class="small">{tr('pr.progress', { done: hours.done, target: hours.target, planned: hours.planned })}</span>
       </p>
+      {hours.end && (
+        <p class="small">
+          <strong>{tr(s.practicas_end ? 'pr.fixedEnd' : 'pr.projectedEnd', { date: dayLabel(hours.end) })}</strong>
+          {s.practicas_end && hours.planned < hours.target && (
+            <span class="warn-text"> · {tr('pr.short', { missing: hours.target - hours.planned })}</span>
+          )}
+        </p>
+      )}
       <form
         class="grid-form"
         onSubmit={(e) => {
@@ -341,7 +350,15 @@ function PracticasSettings() {
         </label>
         <label class="field">
           <span>{tr('pr.end')}</span>
-          <input type="date" value={endDate} onInput={(e) => setEndDate((e.target as HTMLInputElement).value)} />
+          <input
+            type="date"
+            value={endDate}
+            aria-describedby="pr-end-help"
+            onInput={(e) => setEndDate((e.target as HTMLInputElement).value)}
+          />
+          <span id="pr-end-help" class="muted small">
+            {tr('pr.endHelp', { target: total })}
+          </span>
         </label>
         <fieldset class="span-all weekdays">
           <legend>{tr('pr.days')}</legend>

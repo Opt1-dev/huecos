@@ -128,7 +128,7 @@ These rules drive the free-time computation in `app/src/engine/schedule.ts`, a p
 
 - Times are **minutes since midnight in the user's time zone** (default `Europe/Madrid`), computed with `Intl`, never by adding hours to UTC.
 - Free time is only counted between **08:00 and 00:00**. Time after midnight is shown but never counted as free.
-- **Prácticas** (optional module): Monday to Friday, 09:00–13:00 (4 h a day), from 1 Oct 2026 to 1 Mar 2027, except blocked days (non-school and holidays). Hours done are tracked towards a 500-hour total.
+- **Prácticas** (optional module): Monday to Friday, 09:00–13:00 (4 h a day), from 1 Oct 2026 until the 500-hour total is reached, except blocked days (non-school and holidays). With no fixed end date, the last day is computed from the start date, hours per day, weekdays and blocked days (125 days of 4 h → 24 Mar 2027 with no blocked day); a fixed end date can still be set, and Réglages warns when it leaves hours missing.
 - **Buffers** where nothing can be scheduled (shown as hatched "Trajet" zones):
   - 45 min before prácticas;
   - 1 h 15 after prácticas (leave, get home, eat);

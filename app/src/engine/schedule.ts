@@ -153,29 +153,74 @@ function clip(i: Interval, r: Interval): Interval | null {
 const minutes = (ms: number) => Math.round(ms / MINUTE);
 const overlaps = (i: Interval, r: Interval) => i.endMs > r.startMs && i.startMs < r.endMs;
 
-/** Is `date` a prácticas day? Returns the blocking reason when it is excluded by a blocked day. */
-export function practicasDay(date: string, s: ScheduleSettings): { on: boolean; blocked: BlockedKind | null } {
-  const p = s.practicas;
-  if (!p.enabled || !p.start || !p.end || date < p.start || date > p.end) return { on: false, blocked: null };
-  if (!p.weekdays.includes(isoWeekday(date))) return { on: false, blocked: null };
+/** Same weekday and not blocked: a working day, ignoring the period bounds. */
+function practicasWorkday(date: string, s: ScheduleSettings): { on: boolean; blocked: BlockedKind | null } {
+  if (!s.practicas.weekdays.includes(isoWeekday(date))) return { on: false, blocked: null };
   const blocked = s.blockedDays.get(date) ?? null;
   return { on: !blocked, blocked };
 }
 
-/** Prácticas hours: done before `today`, planned over the whole period, and the target. */
-export function practicasHours(s: ScheduleSettings, today: string): { done: number; planned: number; target: number } {
+const MAX_PRACTICAS_DAYS = 3 * 366;
+const endCache = new WeakMap<ScheduleSettings, string | null>();
+
+/**
+ * Last prácticas day. A fixed end date wins; otherwise it is the day on which
+ * the cumulative hours (working weekdays, blocked days skipped) reach the target.
+ */
+export function practicasEnd(s: ScheduleSettings): string | null {
   const p = s.practicas;
+  if (!p.enabled || !p.start) return null;
+  if (p.end) return p.end;
+  if (endCache.has(s)) return endCache.get(s)!;
   const perDay = (p.endMin - p.startMin) / 60;
-  let done = 0;
-  let planned = 0;
-  if (p.enabled && p.start && p.end) {
-    for (let d = p.start; d <= p.end; d = addDays(d, 1)) {
-      if (!practicasDay(d, s).on) continue;
-      planned += perDay;
-      if (d < today) done += perDay;
+  let end: string | null = null;
+  if (perDay > 0 && p.weekdays.length > 0 && p.totalHours > 0) {
+    let hours = 0;
+    let d = p.start;
+    for (let i = 0; i < MAX_PRACTICAS_DAYS; i++, d = addDays(d, 1)) {
+      if (!practicasWorkday(d, s).on) continue;
+      hours += perDay;
+      if (hours >= p.totalHours) {
+        end = d;
+        break;
+      }
     }
   }
-  return { done, planned, target: p.totalHours };
+  endCache.set(s, end);
+  return end;
+}
+
+/** Is `date` a prácticas day? Returns the blocking reason when it is excluded by a blocked day. */
+export function practicasDay(date: string, s: ScheduleSettings): { on: boolean; blocked: BlockedKind | null } {
+  const p = s.practicas;
+  const end = practicasEnd(s);
+  if (!p.enabled || !p.start || !end || date < p.start || date > end) return { on: false, blocked: null };
+  return practicasWorkday(date, s);
+}
+
+/**
+ * Prácticas hours: done before `today`, planned over the whole period (the
+ * last day is shortened when the target is not a multiple of the daily hours),
+ * the target and the last day.
+ */
+export function practicasHours(
+  s: ScheduleSettings,
+  today: string,
+): { done: number; planned: number; target: number; end: string | null } {
+  const p = s.practicas;
+  const perDay = (p.endMin - p.startMin) / 60;
+  const end = practicasEnd(s);
+  let done = 0;
+  let planned = 0;
+  if (p.enabled && p.start && end) {
+    for (let d = p.start; d <= end; d = addDays(d, 1)) {
+      if (!practicasDay(d, s).on) continue;
+      const hours = p.end ? perDay : Math.min(perDay, p.totalHours - planned);
+      planned += hours;
+      if (d < today) done += hours;
+    }
+  }
+  return { done, planned, target: p.totalHours, end };
 }
 
 function applyOverrides(events: readonly EventInput[], overrides: readonly OverrideInput[]) {
