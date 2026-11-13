@@ -8,6 +8,7 @@ const base = process.env.BASE_PATH ?? '/huecos/';
 
 export default defineConfig({
   base,
+  server: { fs: { allow: [".."] } },
   plugins: [
     preact(),
     VitePWA({
@@ -30,6 +31,6 @@ export default defineConfig({
   ],
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', '../supabase/functions/_shared/*.test.ts'],
   },
 });

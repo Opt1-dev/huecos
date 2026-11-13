@@ -1,7 +1,10 @@
 import { signal } from '@preact/signals';
 import { t, type MessageKey } from '../i18n';
 import { online, signOut } from '../lib/session';
-import { LanguagePicker } from './LanguagePicker';
+import { useEffect } from 'preact/hooks';
+import { clearCache, loadAll, startRealtime, stopRealtime } from '../lib/data';
+import { DayView } from './DayView';
+import { SettingsView } from './SettingsView';
 
 const TABS = [
   { id: 'day', label: 'tabs.day' },
@@ -44,13 +47,27 @@ function onTabKeyDown(event: KeyboardEvent) {
 
 export function Shell() {
   const tr = t.value;
+  useEffect(() => {
+    void loadAll();
+    startRealtime();
+    const reload = () => {
+      if (document.visibilityState === 'visible') void loadAll();
+    };
+    document.addEventListener('visibilitychange', reload);
+    window.addEventListener('online', reload);
+    return () => {
+      stopRealtime();
+      document.removeEventListener('visibilitychange', reload);
+      window.removeEventListener('online', reload);
+    };
+  }, []);
   return (
     <div class="shell">
       <header class="topbar">
         <h1 class="brand">{tr('app.name')}</h1>
         <div class="topbar-status">
           {!online.value && <span class="badge warn">{tr('status.offline')}</span>}
-          <button type="button" class="btn ghost" onClick={() => void signOut()}>
+          <button type="button" class="btn ghost" onClick={() => void clearCache().then(signOut)}>
             {tr('session.signOut')}
           </button>
         </div>
@@ -84,10 +101,10 @@ export function Shell() {
         class="panel"
         tabIndex={0}
       >
-        {activeTab.value === 'settings' ? (
-          <section class="card">
-            <LanguagePicker />
-          </section>
+        {activeTab.value === 'day' ? (
+          <DayView />
+        ) : activeTab.value === 'settings' ? (
+          <SettingsView />
         ) : (
           <div class="columns">
             <section class="card">

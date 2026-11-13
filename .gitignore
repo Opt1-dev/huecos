@@ -9,3 +9,8 @@ supabase/.temp/
 supabase/.branches/
 .DS_Store
 .claude/
+
+# Local notes that may hold credentials
+ACCESS TOKEN
+*TOKEN*
+*.token
