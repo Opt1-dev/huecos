@@ -2,7 +2,7 @@
 // layouts without signing in. Never imported in production builds.
 import type { Session } from '@supabase/supabase-js';
 import { session } from './session';
-import { blockedDays, calendars, entries, events, loaded, overrides, settingsRow, tasks, type EventRow } from './data';
+import { blockedDays, calendars, entries, events, loaded, overrides, rendus, settingsRow, subjects, tasks, type EventRow } from './data';
 import { addDays, localDate, zonedToUtc } from '../../../supabase/functions/_shared/tz.ts';
 
 export function loadDemo(): void {
@@ -56,6 +56,28 @@ export function loadDemo(): void {
     // Days off exported by the shift app as big timed blocks.
     [3, 4, 10].map((n) => ev(`off${n}`, 'amorino', 'Día libre', addDays(today, n), 480, 1440)),
   );
+  subjects.value = [
+    { id: 's1', name: 'DEWES', color_index: 0 },
+    { id: 's2', name: 'Despliegue AW', color_index: 1 },
+    { id: 's3', name: 'Inglés', color_index: 2 },
+    { id: 's4', name: 'Ciberseguridad', color_index: 3 },
+  ];
+  const r = (id: string, extra: Record<string, unknown>) => ({
+    id, event_id: null, subject_id: null, title: id, due: today, state: 'todo', grade: null, note: '',
+    created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', ...extra,
+  }) as (typeof rendus.value)[number];
+  rendus.value = [
+    r('g1', { subject_id: 's1', title: 'Selección de arquitecturas', due: '2026-10-06', state: 'graded', grade: 10 }),
+    r('g2', { subject_id: 's1', title: 'Prueba abierta UD02', due: '2026-10-27', state: 'graded', grade: 7.86 }),
+    r('g3', { subject_id: 's3', title: 'Prueba abierta UD01', due: '2026-10-12', state: 'graded', grade: 9.35 }),
+    r('g4', { subject_id: 's4', title: 'Prueba Abierta UD01', due: '2026-10-12', state: 'graded', grade: 9.75 }),
+    r('g5', { subject_id: 's4', title: 'Prueba Abierta UD02', due: '2026-11-09', state: 'graded', grade: 6.5 }),
+    r('g6', { subject_id: 's2', title: 'Prueba Abierta UD01', due: '2026-11-05', state: 'graded', grade: 5 }),
+    r('g7', { subject_id: 's3', title: 'Prueba abierta UD02', due: '2026-11-09', state: 'graded', grade: 10 }),
+    r('p1', { subject_id: 's2', title: 'Prueba Abierta 1 UD02', due: addDays(today, -4), state: 'submitted' }),
+    r('d1', { subject_id: 's1', title: 'Proyecto: maquetación', due: addDays(today, -1), state: 'done' }),
+    r('t1', { subject_id: 's3', title: 'Writing task', due: addDays(today, 5), state: 'todo', note: 'Relire le sujet' }),
+  ];
   overrides.value = [];
   tasks.value = [
     { id: 't1', title: 'Préparer la présentation de projet', quadrant: 1, day: null, start_min: null, duration_min: 60, done: false, auto_placed: false, created_at: '2026-11-10T10:00:00Z' },

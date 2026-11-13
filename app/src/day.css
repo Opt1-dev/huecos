@@ -819,3 +819,194 @@ button.block.busy {
 .admin-badges .badge.warn {
   background: var(--warn-bg);
 }
+
+/* Chart series colours: the 8 validated categorical slots (light, then dark). */
+:root {
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+  }
+}
+
+/* Rendus */
+.rendu-list,
+.subject-list,
+.chart-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.rendu-row {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  min-width: 0;
+}
+.rendu-head {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.rendu-title {
+  overflow-wrap: anywhere;
+}
+.rendu-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.rendu-controls select {
+  flex: 1 1 140px;
+  min-width: 0;
+  width: auto;
+}
+.rendu-note {
+  width: 100%;
+}
+.subject-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px 0 0;
+  color: var(--text);
+}
+.subject-chip::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c);
+  flex: none;
+}
+.grade-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.grade-box input {
+  width: 4.5em;
+  min-height: 36px;
+  text-align: right;
+  -moz-appearance: textfield;
+}
+.grade-box input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.graded-group > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.graded-group > ul {
+  margin-top: 4px;
+}
+.subject-row {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) minmax(0, 8em) auto;
+  gap: 8px;
+  align-items: center;
+}
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--c);
+  flex: none;
+}
+
+/* Grades chart */
+.grades-chart {
+  position: relative;
+  width: 100%;
+}
+.grades-chart svg {
+  display: block;
+  overflow: visible;
+}
+.chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.chart-ref {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+.chart-axis {
+  fill: var(--muted);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+.chart-line {
+  fill: none;
+  stroke: var(--c);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.chart-point {
+  fill: var(--c);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.chart-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+.chart-hit:focus-visible {
+  outline: none;
+  stroke: var(--focus);
+  stroke-width: 2;
+}
+.chart-tip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 12px));
+  display: grid;
+  gap: 2px;
+  max-width: 180px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.75rem;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
+  pointer-events: none;
+  z-index: 2;
+}
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+  font-size: 0.8rem;
+}
+.chart-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

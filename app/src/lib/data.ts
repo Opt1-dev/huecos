@@ -7,6 +7,7 @@ import { supabase } from './supabase';
 import { session } from './session';
 import { addDays, localDate, isValidTimeZone } from '../../../supabase/functions/_shared/tz.ts';
 import type { TitleRow } from './repeats';
+import type { RenduLite, RenduState, SubjectLite } from './rendus';
 import type { BlockedKind, CalendarInfo, EntryInput, Role, ScheduleData, ScheduleSettings, TaskInput } from '../engine/schedule';
 
 export interface SettingsRow {
@@ -76,6 +77,9 @@ export interface EntryRow {
   end_date: string | null;
 }
 
+export type SubjectRow = SubjectLite;
+export type RenduRow = RenduLite & { created_at: string; updated_at: string };
+
 export interface OverrideRow {
   id: string;
   event_id: string;
@@ -111,6 +115,9 @@ interface Snapshot {
   entries?: EntryRow[];
   /** Missing in snapshots saved before deadline work existed. */
   doneDeadlines?: string[];
+  /** Missing in snapshots saved before rendus existed. */
+  subjects?: SubjectRow[];
+  rendus?: RenduRow[];
   overrides: OverrideRow[];
   tasks: TaskRow[];
   blockedDays: BlockedDayRow[];
@@ -119,6 +126,13 @@ interface Snapshot {
 const CAL_COLUMNS =
   'id, name, role, color, buffer_before_min, buffer_after_min, counts_busy, sort_order, source, hidden_titles, deadline_work_min, deadline_daily_max_min, feed_host, last_synced_at, last_error';
 const ENTRY_COLUMNS = 'id, calendar_id, title, start_min, end_min, weekdays, start_date, end_date';
+const SUBJECT_COLUMNS = 'id, name, color_index';
+const RENDU_COLUMNS = 'id, event_id, subject_id, title, due, state, grade, note, created_at, updated_at';
+
+/** Postgres numeric comes back as text. */
+function normalizeRendus(rows: RenduRow[]): RenduRow[] {
+  return rows.map((r) => ({ ...r, grade: r.grade === null ? null : Number(r.grade) }));
+}
 
 export const settingsRow = signal<SettingsRow | null>(null);
 export const calendars = signal<CalendarRow[]>([]);
@@ -126,6 +140,8 @@ export const events = signal<EventRow[]>([]);
 export const entries = signal<EntryRow[]>([]);
 /** Ids of deadline events marked done. */
 export const doneDeadlines = signal<string[]>([]);
+export const subjects = signal<SubjectRow[]>([]);
+export const rendus = signal<RenduRow[]>([]);
 export const overrides = signal<OverrideRow[]>([]);
 export const tasks = signal<TaskRow[]>([]);
 export const blockedDays = signal<BlockedDayRow[]>([]);
@@ -158,6 +174,8 @@ async function saveSnapshot(userId: string): Promise<void> {
     events: events.value,
     entries: entries.value,
     doneDeadlines: doneDeadlines.value,
+    subjects: subjects.value,
+    rendus: rendus.value,
     overrides: overrides.value,
     tasks: tasks.value,
     blockedDays: blockedDays.value,
@@ -178,6 +196,8 @@ async function loadSnapshot(userId: string): Promise<boolean> {
     events.value = snap.events;
     entries.value = snap.entries ?? [];
     doneDeadlines.value = snap.doneDeadlines ?? [];
+    subjects.value = snap.subjects ?? [];
+    rendus.value = snap.rendus ?? [];
     overrides.value = snap.overrides;
     tasks.value = snap.tasks;
     blockedDays.value = snap.blockedDays;
@@ -213,6 +233,18 @@ async function loadTable<T>(name: 'tasks' | 'overrides'): Promise<T[]> {
   return (data ?? []) as T[];
 }
 
+async function loadSubjects(): Promise<SubjectRow[]> {
+  const { data, error } = await supabase.from('subjects').select(SUBJECT_COLUMNS).order('created_at');
+  fail(error);
+  return (data ?? []) as SubjectRow[];
+}
+
+async function loadRendus(): Promise<RenduRow[]> {
+  const { data, error } = await supabase.from('rendus').select(RENDU_COLUMNS).order('due');
+  fail(error);
+  return normalizeRendus((data ?? []) as RenduRow[]);
+}
+
 async function loadDoneDeadlines(): Promise<string[]> {
   const { data, error } = await supabase.from('deadline_done').select('event_id');
   fail(error);
@@ -237,12 +269,14 @@ export async function loadAll(): Promise<void> {
     fail(se);
     const tz = (s as SettingsRow | null)?.timezone ?? 'Europe/Madrid';
     const range = eventRange(tz);
-    const [cals, evs, ens, dds, ovs, tks, bds] = await Promise.all([
+    const [cals, evs, ens, dds, sbs, rds, ovs, tks, bds] = await Promise.all([
       supabase.from('calendars').select(CAL_COLUMNS).order('sort_order').order('created_at'),
       supabase.from('events').select('id, calendar_id, title, start_at, end_at, all_day, event_type, status')
         .lt('start_at', range.to).gt('end_at', range.from).order('start_at').limit(5000),
       supabase.from('calendar_entries').select(ENTRY_COLUMNS).order('start_min'),
       supabase.from('deadline_done').select('event_id'),
+      supabase.from('subjects').select(SUBJECT_COLUMNS).order('created_at'),
+      supabase.from('rendus').select(RENDU_COLUMNS).order('due'),
       loadTable<OverrideRow>('overrides'),
       loadTable<TaskRow>('tasks'),
       supabase.from('blocked_days').select('date, kind').order('date'),
@@ -251,12 +285,16 @@ export async function loadAll(): Promise<void> {
     fail(evs.error);
     fail(ens.error);
     fail(dds.error);
+    fail(sbs.error);
+    fail(rds.error);
     fail(bds.error);
     settingsRow.value = s as SettingsRow | null;
     calendars.value = (cals.data ?? []) as CalendarRow[];
     events.value = (evs.data ?? []) as EventRow[];
     entries.value = (ens.data ?? []) as EntryRow[];
     doneDeadlines.value = ((dds.data ?? []) as { event_id: string }[]).map((r) => r.event_id);
+    subjects.value = (sbs.data ?? []) as SubjectRow[];
+    rendus.value = normalizeRendus((rds.data ?? []) as RenduRow[]);
     overrides.value = ovs;
     tasks.value = tks;
     blockedDays.value = (bds.data ?? []) as BlockedDayRow[];
@@ -274,12 +312,14 @@ let channel: RealtimeChannel | null = null;
 export function startRealtime(): void {
   const userId = session.value?.user.id;
   if (!userId || channel || demoMode.value) return;
-  const refresh = async (table: 'tasks' | 'overrides' | 'calendar_entries' | 'deadline_done') => {
+  const refresh = async (table: 'tasks' | 'overrides' | 'calendar_entries' | 'deadline_done' | 'subjects' | 'rendus') => {
     try {
       if (table === 'tasks') tasks.value = await loadTable<TaskRow>('tasks');
       else if (table === 'overrides') overrides.value = await loadTable<OverrideRow>('overrides');
       else if (table === 'calendar_entries') entries.value = await loadEntries();
-      else doneDeadlines.value = await loadDoneDeadlines();
+      else if (table === 'deadline_done') doneDeadlines.value = await loadDoneDeadlines();
+      else if (table === 'subjects') subjects.value = await loadSubjects();
+      else rendus.value = await loadRendus();
       await saveSnapshot(userId);
     } catch {
       /* next full load will catch up */
@@ -295,6 +335,8 @@ export function startRealtime(): void {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'deadline_done', filter: `user_id=eq.${userId}` }, () =>
       void refresh('deadline_done'),
     )
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'subjects', filter: `user_id=eq.${userId}` }, () => void refresh('subjects'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'rendus', filter: `user_id=eq.${userId}` }, () => void refresh('rendus'))
     .subscribe();
 }
 
@@ -503,8 +545,67 @@ export async function setDeadlineDone(eventId: string, done: boolean): Promise<v
   doneDeadlines.value = done
     ? [...new Set([...doneDeadlines.value, eventId])]
     : doneDeadlines.value.filter((id) => id !== eventId);
+  rendus.value = await loadRendus();
   await afterWrite();
 }
+
+// ---------------------------------------------------------------------------
+// Subjects and rendus
+// ---------------------------------------------------------------------------
+export async function addSubject(name: string, colorIndex: number): Promise<void> {
+  const { data, error } = await supabase
+    .from('subjects')
+    .insert({ name: name.trim(), color_index: colorIndex })
+    .select(SUBJECT_COLUMNS)
+    .single();
+  fail(error);
+  subjects.value = [...subjects.value, data as SubjectRow];
+  await afterWrite();
+}
+
+export async function updateSubject(id: string, patch: Partial<Pick<SubjectRow, 'name' | 'color_index'>>): Promise<void> {
+  const { data, error } = await supabase.from('subjects').update(patch).eq('id', id).select(SUBJECT_COLUMNS).single();
+  fail(error);
+  subjects.value = subjects.value.map((x) => (x.id === id ? (data as SubjectRow) : x));
+  await afterWrite();
+}
+
+export async function deleteSubject(id: string): Promise<void> {
+  const { error } = await supabase.from('subjects').delete().eq('id', id);
+  fail(error);
+  subjects.value = subjects.value.filter((x) => x.id !== id);
+  await afterWrite();
+}
+
+export type RenduFields = Partial<Pick<RenduRow, 'subject_id' | 'title' | 'due' | 'state' | 'grade' | 'note'>>;
+
+/** Rendus and done deadlines follow each other on the server: reload both. */
+async function afterRenduWrite(): Promise<void> {
+  const [r, d] = await Promise.all([loadRendus(), loadDoneDeadlines()]);
+  rendus.value = r;
+  doneDeadlines.value = d;
+  await afterWrite();
+}
+
+export async function addRendu(fields: RenduFields & Pick<RenduRow, 'title' | 'due'> & { event_id?: string | null }): Promise<void> {
+  const { error } = await supabase.from('rendus').insert(fields);
+  fail(error);
+  await afterRenduWrite();
+}
+
+export async function updateRendu(id: string, patch: RenduFields): Promise<void> {
+  const { error } = await supabase.from('rendus').update(patch).eq('id', id);
+  fail(error);
+  await afterRenduWrite();
+}
+
+export async function deleteRendu(id: string): Promise<void> {
+  const { error } = await supabase.from('rendus').delete().eq('id', id);
+  fail(error);
+  await afterRenduWrite();
+}
+
+export type { RenduState };
 
 export type EntryFields = Omit<EntryRow, 'id' | 'calendar_id'>;
 
