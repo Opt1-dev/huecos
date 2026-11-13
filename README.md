@@ -103,7 +103,8 @@ Merging a pull request into `main` runs `deploy.yml`:
 | --- | --- | --- |
 | `public.invitations` | Email allowlist (`member` or `admin`) | Admins only; read by the Auth hook |
 | `public.settings` | One row per user: language, time zone, free-time window, minimum slot, modules, prácticas settings, last sync | Owner only (read/update) |
-| `public.calendars` | A user's calendars: name, role, colour, buffers before/after, counts as busy, feed host, last sync/error | Owner; `feed_secret_id` can't be written by the browser |
+| `public.calendars` | A user's calendars: name, role, colour, buffers before/after, counts as busy, source (`feed` or `manual`), feed host, last sync/error | Owner; `feed_secret_id` can't be written by the browser; `source` is set once; a manual calendar never has a feed |
+| `public.calendar_entries` | Entries of manual calendars: title, start/end time, ISO weekdays, from/until dates (same date = once). Expanded by the app, not stored per occurrence | Owner, only into their own manual calendars |
 | `public.events` | Synced occurrences, unique on `(calendar_id, uid, start_at)` | Owner reads; only `sync-calendars` writes |
 | `public.overrides` | Move or cancel an event in Huecos only | Owner, only on their own events |
 | `public.tasks` | Tasks with quadrant (1 urgent+important … 4 neither), optional day/time, duration 15 min–4 h | Owner |
@@ -119,6 +120,7 @@ A user's settings row is created automatically at sign-up; an invitation with ro
 - `sync-calendars` runs every 15 min from pg_cron (all users) or from the **Synchroniser** button (that user only, at most every 30 s). It expands each feed from 7 days ago to 60 days ahead with ical.js: RRULE/RDATE/EXDATE, moved occurrences (RECURRENCE-ID), all-day events, TZID with or without VTIMEZONE, UTC, `STATUS:CANCELLED`. It upserts the occurrences and deletes the ones that disappeared from the feed.
 - Classification: titles starting with "Vencimiento de" and every event of a *Deadlines* calendar are deadlines (shown, never busy); "Entrega …" events of the *Main* calendar are study sessions (busy, shown as "Session d'étude"); all-day events never block time.
 - Offline: the last loaded data is kept in IndexedDB, the day view works without network, and the header shows "Dernière synchro hh:mm" and "Hors ligne".
+- Manual calendars: when adding a calendar, choose **Manuel** instead of an .ics link, then add entries in Réglages: title, start and end time, and either some weekdays every week (presets: every day, Mon–Fri, weekend) from a date with an optional end date, or a single date. They block time like synced events, with the calendar's travel buffers. Tap an entry in the day or week view to edit or delete the whole series.
 - Week view: "Ma journée" has a Jour / Semaine switch (remembered per device). The week runs Monday to Sunday with each day's free time, the week totals and the longest slot; tap a day to open it. On a phone the columns scroll sideways and start on today.
 
 ## Scheduling rules

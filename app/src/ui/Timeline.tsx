@@ -117,9 +117,9 @@ export function Timeline({ plan, tz, onSelect, compact = false, label }: Props) 
           '--cal': color,
           '--busy-text': readableText(color),
         };
-        return b.eventId ? (
+        return b.eventId || b.entryId ? (
           <button
-            key={`e${b.eventId}`}
+            key={b.eventId ? `e${b.eventId}` : `r${b.entryId}${b.startMs}`}
             type="button"
             class={`block busy ${b.kind}`}
             style={style}

@@ -594,3 +594,47 @@ button.block.busy {
 .timeline.compact .block.buffer {
   padding: 0;
 }
+
+/* Manual calendar entries */
+.entry-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.entry-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.entry-item.editing {
+  display: block;
+}
+.entry-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 200px;
+}
+.entry-text .small {
+  overflow-wrap: anywhere;
+}
+.entry-new {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+.entry-form .error:empty {
+  display: none;
+}
+.btn.small-btn.danger {
+  justify-self: auto;
+}

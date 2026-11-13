@@ -3,15 +3,19 @@ import { t, type MessageKey } from '../i18n';
 import {
   addBlockedDays,
   addCalendar,
+  addEntry,
   blockedDays,
   calendars,
   deleteBlockedDay,
   deleteCalendar,
+  deleteEntry,
+  entries,
   saveFeed,
   scheduleSettings,
   settingsRow,
   syncNow,
   updateCalendar,
+  updateEntry,
   updateSettings,
   type CalendarInput,
   type CalendarRow,
@@ -21,6 +25,7 @@ import { parseBlockedDays } from '../lib/blocked';
 import { loggedPerDay, practicasHours, type Role } from '../engine/schedule';
 import { localDate } from '../../../supabase/functions/_shared/tz.ts';
 import { LanguagePicker } from './LanguagePicker';
+import { EntryForm, entrySummary } from './EntryForm';
 import { dayLabel, errorText, feedErrorMessage, minutesToInput, parseTimeInput, timeLabel, weekdayShort } from './format';
 
 const ROLES: Role[] = ['work', 'school', 'gym', 'activity', 'deadlines', 'main', 'practicas', 'other'];
@@ -185,44 +190,50 @@ function CalendarItem({ cal }: { cal: CalendarRow }) {
         </label>
       </div>
 
-      <form
-        class="feed-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void run(async () => {
-            const { error } = await saveFeed(cal.id, feed);
-            if (error) {
-              setMessage({ ok: false, text: feedErrorMessage(error) });
-              return null;
-            }
-            setFeed('');
-            await syncNow();
-            return tr('cal.feedOk', { host: calendars.value.find((c) => c.id === cal.id)?.feed_host ?? '' });
-          });
-        }}
-      >
-        <label class="field">
-          <span>{tr('cal.feed')}</span>
-          <input
-            type="password"
-            autocomplete="off"
-            spellcheck={false}
-            placeholder={cal.feed_host ? tr('cal.feedHost', { host: cal.feed_host }) : 'https://…/basic.ics'}
-            value={feed}
-            onInput={(e) => setFeed((e.target as HTMLInputElement).value)}
-            required
-          />
-        </label>
-        <button class="btn" type="submit" disabled={busy || !online.value || !feed.trim()}>
-          {busy ? tr('cal.feedSaving') : tr('cal.feedSave')}
-        </button>
-      </form>
-      <p class="muted small">
-        {cal.feed_host ? tr('cal.feedHost', { host: cal.feed_host }) : tr('cal.noFeed')}
-        {cal.last_synced_at && ` · ${tr('cal.lastSync', { time: timeLabel(Date.parse(cal.last_synced_at), tz) })}`}
-        {cal.last_error && <span class="error"> · {tr('cal.lastError', { code: cal.last_error })}</span>}
-      </p>
-      <p class="muted small">{tr('cal.feedHelp')}</p>
+      {cal.source === 'manual' ? (
+        <ManualEntries cal={cal} />
+      ) : (
+        <>
+          <form
+            class="feed-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void run(async () => {
+                const { error } = await saveFeed(cal.id, feed);
+                if (error) {
+                  setMessage({ ok: false, text: feedErrorMessage(error) });
+                  return null;
+                }
+                setFeed('');
+                await syncNow();
+                return tr('cal.feedOk', { host: calendars.value.find((c) => c.id === cal.id)?.feed_host ?? '' });
+              });
+            }}
+          >
+            <label class="field">
+              <span>{tr('cal.feed')}</span>
+              <input
+                type="password"
+                autocomplete="off"
+                spellcheck={false}
+                placeholder={cal.feed_host ? tr('cal.feedHost', { host: cal.feed_host }) : 'https://…/basic.ics'}
+                value={feed}
+                onInput={(e) => setFeed((e.target as HTMLInputElement).value)}
+                required
+              />
+            </label>
+            <button class="btn" type="submit" disabled={busy || !online.value || !feed.trim()}>
+              {busy ? tr('cal.feedSaving') : tr('cal.feedSave')}
+            </button>
+          </form>
+          <p class="muted small">
+            {cal.feed_host ? tr('cal.feedHost', { host: cal.feed_host }) : tr('cal.noFeed')}
+            {cal.last_synced_at && ` · ${tr('cal.lastSync', { time: timeLabel(Date.parse(cal.last_synced_at), tz) })}`}
+            {cal.last_error && <span class="error"> · {tr('cal.lastError', { code: cal.last_error })}</span>}
+          </p>
+          <p class="muted small">{tr('cal.feedHelp')}</p>
+        </>
+      )}
       <Status message={message} />
       <button
         type="button"
@@ -238,11 +249,90 @@ function CalendarItem({ cal }: { cal: CalendarRow }) {
   );
 }
 
+function ManualEntries({ cal }: { cal: CalendarRow }) {
+  const tr = t.value;
+  const tz = scheduleSettings.value.tz;
+  const [editing, setEditing] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const { busy, message, run } = useBusy();
+  const list = entries.value.filter((e) => e.calendar_id === cal.id);
+
+  return (
+    <div class="stack-tight">
+      <p class="muted small">{tr('cal.manual')}</p>
+      <h3 class="small">{tr('entry.title')}</h3>
+      {list.length === 0 ? (
+        <p class="muted small">{tr('entry.empty')}</p>
+      ) : (
+        <ul class="entry-list">
+          {list.map((e) =>
+            editing === e.id ? (
+              <li key={e.id} class="entry-item editing">
+                <EntryForm
+                  tz={tz}
+                  initial={e}
+                  submitLabel={tr('common.save')}
+                  onSubmit={async (fields) => {
+                    await updateEntry(e.id, fields);
+                    setEditing(null);
+                  }}
+                >
+                  <button type="button" class="btn ghost" onClick={() => setEditing(null)}>
+                    {tr('common.cancel')}
+                  </button>
+                </EntryForm>
+              </li>
+            ) : (
+              <li key={e.id} class="entry-item">
+                <div class="entry-text">
+                  <strong>{e.title}</strong>
+                  <span class="muted small">{entrySummary(e)}</span>
+                </div>
+                <div class="actions">
+                  <button type="button" class="btn small-btn" onClick={() => setEditing(e.id)}>
+                    {tr('entry.edit')}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn small-btn danger"
+                    disabled={busy || !online.value}
+                    onClick={() => {
+                      if (confirm(tr('entry.confirmDelete', { name: e.title }))) void run(() => deleteEntry(e.id));
+                    }}
+                  >
+                    {tr('common.delete')}
+                  </button>
+                </div>
+              </li>
+            ),
+          )}
+        </ul>
+      )}
+      {adding ? (
+        <div class="entry-new">
+          <h3 class="small">{tr('entry.add')}</h3>
+          <EntryForm tz={tz} submitLabel={tr('entry.add')} onSubmit={(fields) => addEntry(cal.id, fields)}>
+            <button type="button" class="btn ghost" onClick={() => setAdding(false)}>
+              {tr('common.close')}
+            </button>
+          </EntryForm>
+        </div>
+      ) : (
+        <button type="button" class="btn" disabled={!online.value} onClick={() => setAdding(true)}>
+          + {tr('entry.add')}
+        </button>
+      )}
+      <Status message={message} />
+    </div>
+  );
+}
+
 function CalendarsSettings() {
   const tr = t.value;
   const { busy, message, run } = useBusy();
   const [name, setName] = useState('');
   const [role, setRole] = useState<Role>('work');
+  const [source, setSource] = useState<CalendarRow['source']>('feed');
 
   return (
     <section class="card stack" aria-labelledby="cal-h">
@@ -261,7 +351,7 @@ function CalendarsSettings() {
         onSubmit={(e) => {
           e.preventDefault();
           void run(async () => {
-            await addCalendar({ name: name.trim(), role, ...ROLE_DEFAULTS[role] });
+            await addCalendar({ name: name.trim(), role, source, ...ROLE_DEFAULTS[role] });
             setName('');
           });
         }}
@@ -281,6 +371,17 @@ function CalendarsSettings() {
             ))}
           </select>
         </label>
+        <fieldset class="span-all stack-tight">
+          <legend>{tr('cal.source')}</legend>
+          <label class="check">
+            <input type="radio" name="cal-source" checked={source === 'feed'} onChange={() => setSource('feed')} />
+            <span>{tr('cal.sourceFeed')}</span>
+          </label>
+          <label class="check">
+            <input type="radio" name="cal-source" checked={source === 'manual'} onChange={() => setSource('manual')} />
+            <span>{tr('cal.sourceManual')}</span>
+          </label>
+        </fieldset>
         <button class="btn primary" type="submit" disabled={busy || !online.value || !name.trim()}>
           {tr('cal.add')}
         </button>

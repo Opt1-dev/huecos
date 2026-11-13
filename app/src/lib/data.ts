@@ -6,7 +6,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { session } from './session';
 import { addDays, localDate, isValidTimeZone } from '../../../supabase/functions/_shared/tz.ts';
-import type { BlockedKind, CalendarInfo, Role, ScheduleData, ScheduleSettings, TaskInput } from '../engine/schedule';
+import type { BlockedKind, CalendarInfo, EntryInput, Role, ScheduleData, ScheduleSettings, TaskInput } from '../engine/schedule';
 
 export interface SettingsRow {
   user_id: string;
@@ -40,6 +40,8 @@ export interface CalendarRow {
   buffer_after_min: number;
   counts_busy: boolean;
   sort_order: number;
+  /** feed = synced from an .ics link; manual = entries typed in Huecos. */
+  source: 'feed' | 'manual';
   feed_host: string | null;
   last_synced_at: string | null;
   last_error: string | null;
@@ -54,6 +56,18 @@ export interface EventRow {
   all_day: boolean;
   event_type: 'event' | 'focus' | 'deadline';
   status: 'confirmed' | 'tentative' | 'cancelled';
+}
+
+/** Entry of a manual calendar, repeated on some weekdays between two dates. */
+export interface EntryRow {
+  id: string;
+  calendar_id: string;
+  title: string;
+  start_min: number;
+  end_min: number;
+  weekdays: number[];
+  start_date: string;
+  end_date: string | null;
 }
 
 export interface OverrideRow {
@@ -87,17 +101,21 @@ interface Snapshot {
   settings: SettingsRow | null;
   calendars: CalendarRow[];
   events: EventRow[];
+  /** Missing in snapshots saved before manual calendars existed. */
+  entries?: EntryRow[];
   overrides: OverrideRow[];
   tasks: TaskRow[];
   blockedDays: BlockedDayRow[];
 }
 
 const CAL_COLUMNS =
-  'id, name, role, color, buffer_before_min, buffer_after_min, counts_busy, sort_order, feed_host, last_synced_at, last_error';
+  'id, name, role, color, buffer_before_min, buffer_after_min, counts_busy, sort_order, source, feed_host, last_synced_at, last_error';
+const ENTRY_COLUMNS = 'id, calendar_id, title, start_min, end_min, weekdays, start_date, end_date';
 
 export const settingsRow = signal<SettingsRow | null>(null);
 export const calendars = signal<CalendarRow[]>([]);
 export const events = signal<EventRow[]>([]);
+export const entries = signal<EntryRow[]>([]);
 export const overrides = signal<OverrideRow[]>([]);
 export const tasks = signal<TaskRow[]>([]);
 export const blockedDays = signal<BlockedDayRow[]>([]);
@@ -128,6 +146,7 @@ async function saveSnapshot(userId: string): Promise<void> {
     settings: settingsRow.value,
     calendars: calendars.value,
     events: events.value,
+    entries: entries.value,
     overrides: overrides.value,
     tasks: tasks.value,
     blockedDays: blockedDays.value,
@@ -146,6 +165,7 @@ async function loadSnapshot(userId: string): Promise<boolean> {
     settingsRow.value = snap.settings;
     calendars.value = snap.calendars;
     events.value = snap.events;
+    entries.value = snap.entries ?? [];
     overrides.value = snap.overrides;
     tasks.value = snap.tasks;
     blockedDays.value = snap.blockedDays;
@@ -181,6 +201,12 @@ async function loadTable<T>(name: 'tasks' | 'overrides'): Promise<T[]> {
   return (data ?? []) as T[];
 }
 
+async function loadEntries(): Promise<EntryRow[]> {
+  const { data, error } = await supabase.from('calendar_entries').select(ENTRY_COLUMNS).order('start_min');
+  fail(error);
+  return (data ?? []) as EntryRow[];
+}
+
 export async function loadAll(): Promise<void> {
   const userId = session.value?.user.id;
   if (!userId || demoMode.value) return;
@@ -193,20 +219,23 @@ export async function loadAll(): Promise<void> {
     fail(se);
     const tz = (s as SettingsRow | null)?.timezone ?? 'Europe/Madrid';
     const range = eventRange(tz);
-    const [cals, evs, ovs, tks, bds] = await Promise.all([
+    const [cals, evs, ens, ovs, tks, bds] = await Promise.all([
       supabase.from('calendars').select(CAL_COLUMNS).order('sort_order').order('created_at'),
       supabase.from('events').select('id, calendar_id, title, start_at, end_at, all_day, event_type, status')
         .lt('start_at', range.to).gt('end_at', range.from).order('start_at').limit(5000),
+      supabase.from('calendar_entries').select(ENTRY_COLUMNS).order('start_min'),
       loadTable<OverrideRow>('overrides'),
       loadTable<TaskRow>('tasks'),
       supabase.from('blocked_days').select('date, kind').order('date'),
     ]);
     fail(cals.error);
     fail(evs.error);
+    fail(ens.error);
     fail(bds.error);
     settingsRow.value = s as SettingsRow | null;
     calendars.value = (cals.data ?? []) as CalendarRow[];
     events.value = (evs.data ?? []) as EventRow[];
+    entries.value = (ens.data ?? []) as EntryRow[];
     overrides.value = ovs;
     tasks.value = tks;
     blockedDays.value = (bds.data ?? []) as BlockedDayRow[];
@@ -224,10 +253,11 @@ let channel: RealtimeChannel | null = null;
 export function startRealtime(): void {
   const userId = session.value?.user.id;
   if (!userId || channel || demoMode.value) return;
-  const refresh = async (table: 'tasks' | 'overrides') => {
+  const refresh = async (table: 'tasks' | 'overrides' | 'calendar_entries') => {
     try {
       if (table === 'tasks') tasks.value = await loadTable<TaskRow>('tasks');
-      else overrides.value = await loadTable<OverrideRow>('overrides');
+      else if (table === 'overrides') overrides.value = await loadTable<OverrideRow>('overrides');
+      else entries.value = await loadEntries();
       await saveSnapshot(userId);
     } catch {
       /* next full load will catch up */
@@ -237,6 +267,9 @@ export function startRealtime(): void {
     .channel(`user-${userId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `user_id=eq.${userId}` }, () => void refresh('tasks'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'overrides', filter: `user_id=eq.${userId}` }, () => void refresh('overrides'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_entries', filter: `user_id=eq.${userId}` }, () =>
+      void refresh('calendar_entries'),
+    )
     .subscribe();
 }
 
@@ -291,6 +324,16 @@ export const scheduleData = computed<ScheduleData>(() => ({
     allDay: e.all_day,
     eventType: e.event_type,
     status: e.status,
+  })),
+  entries: entries.value.map<EntryInput>((e) => ({
+    id: e.id,
+    calendarId: e.calendar_id,
+    title: e.title,
+    startMin: e.start_min,
+    endMin: e.end_min,
+    weekdays: e.weekdays,
+    startDate: e.start_date,
+    endDate: e.end_date,
   })),
   overrides: overrides.value.map((o) => ({
     eventId: o.event_id,
@@ -368,7 +411,7 @@ export async function updateSettings(patch: Partial<Omit<SettingsRow, 'user_id'>
 
 export type CalendarInput = Pick<CalendarRow, 'name' | 'role' | 'color' | 'buffer_before_min' | 'buffer_after_min' | 'counts_busy'>;
 
-export async function addCalendar(input: CalendarInput): Promise<CalendarRow> {
+export async function addCalendar(input: CalendarInput & { source: CalendarRow['source'] }): Promise<CalendarRow> {
   const { data, error } = await supabase
     .from('calendars')
     .insert({ ...input, sort_order: calendars.value.length })
@@ -392,6 +435,38 @@ export async function deleteCalendar(id: string): Promise<void> {
   fail(error);
   calendars.value = calendars.value.filter((c) => c.id !== id);
   events.value = events.value.filter((e) => e.calendar_id !== id);
+  entries.value = entries.value.filter((e) => e.calendar_id !== id);
+  await afterWrite();
+}
+
+export type EntryFields = Omit<EntryRow, 'id' | 'calendar_id'>;
+
+function sortEntries(list: EntryRow[]): EntryRow[] {
+  return [...list].sort((a, b) => a.start_min - b.start_min || a.title.localeCompare(b.title));
+}
+
+export async function addEntry(calendarId: string, input: EntryFields): Promise<void> {
+  const { data, error } = await supabase
+    .from('calendar_entries')
+    .insert({ calendar_id: calendarId, ...input })
+    .select(ENTRY_COLUMNS)
+    .single();
+  fail(error);
+  entries.value = sortEntries([...entries.value, data as EntryRow]);
+  await afterWrite();
+}
+
+export async function updateEntry(id: string, patch: EntryFields): Promise<void> {
+  const { data, error } = await supabase.from('calendar_entries').update(patch).eq('id', id).select(ENTRY_COLUMNS).single();
+  fail(error);
+  entries.value = sortEntries(entries.value.map((e) => (e.id === id ? (data as EntryRow) : e)));
+  await afterWrite();
+}
+
+export async function deleteEntry(id: string): Promise<void> {
+  const { error } = await supabase.from('calendar_entries').delete().eq('id', id);
+  fail(error);
+  entries.value = entries.value.filter((e) => e.id !== id);
   await afterWrite();
 }
 
