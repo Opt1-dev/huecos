@@ -4,7 +4,7 @@ import { addTask, deleteTask, tasks, updateTask, type TaskRow } from '../lib/dat
 import { online } from '../lib/session';
 import type { Placement } from '../engine/schedule';
 import { localDate } from '../../../supabase/functions/_shared/tz.ts';
-import { dayLabel, durationLabel, errorText, minutesToInput, parseTimeInput, QUADRANT_KEYS, timeLabel } from './format';
+import { durationLabel, errorText, minutesToInput, parseTimeInput, QUADRANT_KEYS, timeLabel, weekdayDay } from './format';
 
 const DURATIONS = [15, 30, 45, 60, 90, 120, 150, 180, 210, 240];
 type Q = 1 | 2 | 3 | 4;
@@ -38,7 +38,14 @@ export function TasksPanel({ date, tz, placements }: Props) {
 
   // Shown: tasks of this day, plus undated open tasks (they are not tied to a day).
   const visible = tasks.value.filter((tk) => tk.day === date || (tk.day === null && !tk.done));
-  const placementOf = new Map(placements.map((p) => [p.taskId, p.block]));
+  const placementOf = new Map(placements.map((p) => [p.taskId, p.blocks]));
+  /** "14:00" on the shown day, "lun. 16 14:00" on another day. */
+  const when = (ms: number) => {
+    const d = localDate(ms, tz);
+    if (d === date) return timeLabel(ms, tz);
+    const { weekday, day } = weekdayDay(d);
+    return `${weekday} ${day} ${timeLabel(ms, tz)}`;
+  };
 
   function TaskLine({ task }: { task: TaskRow }) {
     const placed = placementOf.get(task.id);
@@ -58,17 +65,10 @@ export function TasksPanel({ date, tz, placements }: Props) {
             {' · '}
             {task.start_min !== null ? `${minutesToInput(task.start_min)} · ` : ''}
             {durationLabel(task.duration_min)}
-            {placed === null && !task.done && task.quadrant === 1 && task.start_min === null && (
-              <span class="warn-text"> · {tr('tasks.unplaced')}</span>
-            )}
-            {placed && (
-              <>
-                {' · '}
-                {tr('tasks.placed', {
-                  day: localDate(placed.startMs, tz) === date ? '' : dayLabel(localDate(placed.startMs, tz)),
-                  time: timeLabel(placed.startMs, tz),
-                }).replace('  ', ' ')}
-              </>
+            {placed && placed.length === 0 && <span class="warn-text"> · {tr(`tasks.unplaced.${task.quadrant}`)}</span>}
+            {placed && placed.length === 1 && <> · {tr('tasks.placed', { when: when(placed[0]!.startMs) })}</>}
+            {placed && placed.length === 2 && (
+              <> · {tr('tasks.placedParts', { first: when(placed[0]!.startMs), second: when(placed[1]!.startMs) })}</>
             )}
           </span>
         </label>
@@ -109,8 +109,8 @@ export function TasksPanel({ date, tz, placements }: Props) {
             await addTask({
               title: title.trim(),
               quadrant,
-              // A task with a time belongs to the shown day; otherwise it is undated.
-              day: startMin !== null ? date : quadrant === 1 ? null : date,
+              // A task with a time belongs to the shown day; otherwise Huecos places it.
+              day: startMin !== null ? date : null,
               start_min: startMin,
               duration_min: duration,
             });
@@ -148,6 +148,7 @@ export function TasksPanel({ date, tz, placements }: Props) {
             ))}
           </select>
         </label>
+        {!start && <p class="muted small span-all">{tr(`tasks.rule.${quadrant}`)}</p>}
         <button class="btn primary" type="submit" disabled={busy || !online.value || !title.trim()}>
           {tr('tasks.add')}
         </button>

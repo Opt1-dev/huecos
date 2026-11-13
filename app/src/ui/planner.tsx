@@ -81,9 +81,6 @@ export function SyncBar({ tz }: { tz: string }) {
         >
           {syncing.value ? tr('sync.running') : tr('sync.button')}
         </button>
-        <a class="btn ghost" href="https://claude.ai/new" target="_blank" rel="noopener noreferrer">
-          {tr('day.writeClaude')}
-        </a>
       </div>
       {syncError && (
         <p role="alert" class="error small">

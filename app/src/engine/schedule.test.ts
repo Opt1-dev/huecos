@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { zonedToUtc } from '../../../supabase/functions/_shared/tz.ts';
+import { addDays, localDate, zonedToUtc } from '../../../supabase/functions/_shared/tz.ts';
 import {
   autoPlace,
   buildDay,
@@ -236,35 +236,83 @@ describe('buildDay', () => {
 });
 
 describe('auto-placement', () => {
+  const now = at(D, '08:00');
+  const day = (i: number) => addDays(D, i);
+  /** Busy from 08:00 to `until` on day offsets [from, to], except `free` offsets. */
+  const busyDays = (from: number, to: number, until: string, free: number[] = []) =>
+    Array.from({ length: to - from + 1 }, (_, k) => from + k)
+      .filter((i) => !free.includes(i))
+      .map((i) => ev('other', at(day(i), '08:00'), at(day(i), until)));
+  const where = (b: { startMs: number }) => `${localDate(b.startMs, TZ)} ${hm(b.startMs)}`;
+
   it('puts an urgent+important task in the first slot long enough', () => {
-    const now = at(D, '08:00');
     const d = data([ev('other', at(D, '08:30'), at(D, '20:00'))], [task('a', { durationMin: 120 })]);
     const [placement] = autoPlace(d, settings(), now);
-    expect(hm(placement!.block!.startMs)).toBe('20:00');
+    expect(placement!.blocks.map(where)).toEqual([`${D} 20:00`]);
     const { plan } = planDay(D, d, settings(), now);
     expect(plan.busy.some((b) => b.autoPlaced)).toBe(true);
     expect(slots(plan)).toEqual(['08:00-08:30', '22:00-00:00']);
   });
 
-  it('ignores other quadrants, done tasks and tasks with a time', () => {
-    const d = data([], [task('b', { quadrant: 2 }), task('c', { done: true }), task('dd', { day: D, startMin: 600 })]);
-    expect(autoPlace(d, settings(), MORNING)).toEqual([]);
+  it('ignores done tasks and tasks with a time', () => {
+    const d = data([], [task('c', { done: true }), task('dd', { day: D, startMin: 600 })]);
+    expect(autoPlace(d, settings(), now)).toEqual([]);
   });
 
-  it('returns null when nothing fits within 48 h', () => {
-    const now = at(D, '08:00');
-    const busyAllWeek = [0, 1, 2, 3].map((i) => {
-      const day = `2026-11-${18 + i}`;
-      return ev('other', at(day, '08:00'), at(day, '23:55'));
-    });
-    const [placement] = autoPlace(data(busyAllWeek, [task('x', { durationMin: 30 })]), settings(), now);
-    expect(placement).toEqual({ taskId: 'x', block: null });
+  it('splits an urgent task in 2 halves on 2 different days when no slot is long enough', () => {
+    // Every day only 23:00–00:00 is free.
+    const d = data(busyDays(0, 3, '23:00'), [task('a', { durationMin: 90 })]);
+    const [placement] = autoPlace(d, settings(), now);
+    expect(placement!.blocks.map(where)).toEqual([`${D} 23:00`, `${day(1)} 23:00`]);
+    expect(placement!.blocks.map((b) => (b.endMs - b.startMs) / 60_000)).toEqual([45, 45]);
+    expect(placement!.blocks.map((b) => b.title)).toEqual(['a (1/2)', 'a (2/2)']);
   });
 
-  it('places several tasks one after another', () => {
-    const now = at(D, '08:00');
-    const out = autoPlace(data([], [task('p', { durationMin: 60 }), task('qq', { durationMin: 30 })]), settings(), now);
-    expect(out.map((p) => hm(p.block!.startMs))).toEqual(['08:00', '09:00']);
+  it('keeps urgent tasks within 3 days', () => {
+    // Nothing free for 3 days; the 4th day is free but too late.
+    const d = data(busyDays(0, 2, '23:55'), [task('a', { durationMin: 30 }), task('bb', { quadrant: 3, durationMin: 30 })]);
+    expect(autoPlace(d, settings(), now).map((p) => p.blocks)).toEqual([[], []]);
+    const d2 = data(busyDays(0, 1, '23:55'), [task('a', { durationMin: 30 })]);
+    expect(autoPlace(d2, settings(), now)[0]!.blocks.map(where)).toEqual([`${day(2)} 08:00`]);
+  });
+
+  it('places urgent tasks first, then important, then the rest', () => {
+    const d = data(
+      [],
+      [
+        task('q4', { quadrant: 4, createdAt: '2026-11-17T00:00:00Z' }),
+        task('q3', { quadrant: 3, createdAt: '2026-11-17T00:00:01Z' }),
+        task('q1', { quadrant: 1, createdAt: '2026-11-17T00:00:02Z' }),
+      ],
+    );
+    const out = autoPlace(d, settings(), now);
+    expect(out.map((p) => `${p.taskId} ${hm(p.blocks[0]!.startMs)}`)).toEqual(['q1 08:00', 'q3 09:00', 'q4 10:00']);
+  });
+
+  it('puts an important, not urgent task in the longest free slot of the next 7 days', () => {
+    // Free evenings everywhere; Sunday (day 4) completely free; day 9 too, but too late.
+    const d = data(busyDays(0, 12, '20:00', [4, 9]), [task('imp', { quadrant: 2, createdAt: `${D}T07:00:00Z` })]);
+    expect(autoPlace(d, settings(), now)[0]!.blocks.map(where)).toEqual([`${day(4)} 08:00`]);
+  });
+
+  it('counts the 7 days from the day the task was entered', () => {
+    // Entered 5 days ago: the free Sunday (day 4) is after its deadline (day 2).
+    const d = data(busyDays(0, 12, '20:00', [4]), [task('imp', { quadrant: 2, createdAt: '2026-11-13T09:00:00Z' })]);
+    expect(autoPlace(d, settings(), now)[0]!.blocks.map(where)).toEqual([`${D} 20:00`]);
+  });
+
+  it('puts a task that is neither urgent nor important within 2 weeks', () => {
+    // Busy every day for 10 days, free on day 11.
+    const d = data(busyDays(0, 10, '23:55'), [task('later', { quadrant: 4, createdAt: `${D}T07:00:00Z` })]);
+    expect(autoPlace(d, settings(), now)[0]!.blocks.map(where)).toEqual([`${day(11)} 08:00`]);
+    // Nothing free for 15 days: not placed.
+    const full = data(busyDays(0, 16, '23:55'), [task('later', { quadrant: 4, createdAt: `${D}T07:00:00Z` })]);
+    expect(autoPlace(full, settings(), now)[0]!.blocks).toEqual([]);
+  });
+
+  it('gives an overdue task the same span again from today', () => {
+    const d = data([], [task('old', { quadrant: 4, createdAt: '2026-10-01T09:00:00Z' })]);
+    expect(autoPlace(d, settings(), now)[0]!.blocks.map(where)).toEqual([`${D} 08:00`]);
   });
 });
 
