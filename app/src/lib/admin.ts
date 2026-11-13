@@ -87,6 +87,12 @@ export async function unbanAccount(userId: string): Promise<void> {
   fail(error);
 }
 
+/** Delete an account and all its data, for good. */
+export async function deleteAccount(userId: string): Promise<void> {
+  const { error } = await supabase.rpc('admin_delete_user', { p_user_id: userId });
+  fail(error);
+}
+
 export async function listBannedEmails(): Promise<BannedEmailRow[]> {
   if (demoMode.value) return [{ email: 'spam@example.com', banned_at: '2026-11-12T10:00:00Z', has_account: false }];
   const { data, error } = await supabase.rpc('admin_list_banned_emails');
