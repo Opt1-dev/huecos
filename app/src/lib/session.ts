@@ -44,7 +44,7 @@ export async function signOut(): Promise<void> {
 /** Set when the user opened a password-reset link: the app asks for a new password. */
 export const passwordRecovery = signal(false);
 
-export const MIN_PASSWORD = 8;
+export { MIN_PASSWORD } from '../ui/passwordRules';
 
 /** Sign-up code from a ?join=… link, if any. */
 export function joinCode(): string | null {
