@@ -82,6 +82,12 @@ export function loadDemo(): void {
     { id: 'n1', subject_id: null, title: 'Idées de week-end', body: 'Randonnée à la Sierra\nMarché de Ruzafa samedi matin', pinned: true, created_at: '2026-11-01T10:00:00Z', updated_at: '2026-11-08T10:00:00Z' },
     { id: 'n2', subject_id: 's1', title: 'Formulaires : points clés', body: 'Valider côté serveur aussi.\nUtiliser les labels pour chaque champ.\nTester avec le clavier.', pinned: false, created_at: '2026-11-05T10:00:00Z', updated_at: '2026-11-12T18:30:00Z' },
     { id: 'n3', subject_id: 's3', title: 'Vocabulary', body: 'deadline, handed in, feedback', pinned: false, created_at: '2026-10-20T10:00:00Z', updated_at: '2026-10-21T09:00:00Z' },
+    { id: 'n4', subject_id: 's1', title: 'Formulaires : validation', body: 'Messages d’erreur à côté du champ.', pinned: false, created_at: '2026-11-06T10:00:00Z', updated_at: '2026-11-09T10:00:00Z' },
+    { id: 'n5', subject_id: null, title: 'Logo The Buffer Club', body: 'Trois pistes : typographique, pictogramme, mixte.', pinned: false, created_at: '2026-11-02T10:00:00Z', updated_at: '2026-11-10T10:00:00Z' },
+    { id: 'n6', subject_id: null, title: 'Couleurs du logo', body: 'Vert sauge, crème, noir.', pinned: false, created_at: '2026-11-03T10:00:00Z', updated_at: '2026-11-07T10:00:00Z' },
+    { id: 'n7', subject_id: null, title: 'The Buffer Club : réunion', body: 'Jeudi 19 h.', pinned: false, created_at: '2026-11-04T10:00:00Z', updated_at: '2026-11-06T10:00:00Z' },
+    { id: 'n8', subject_id: 's2', title: 'Projet DAW : idées', body: 'Gestion de réservations ?', pinned: false, created_at: '2026-10-25T10:00:00Z', updated_at: '2026-10-30T10:00:00Z' },
+    { id: 'n9', subject_id: 's2', title: 'Projet DAW : planning', body: 'Maquettes en novembre, code en décembre.', pinned: false, created_at: '2026-10-26T10:00:00Z', updated_at: '2026-11-01T10:00:00Z' },
   ];
   overrides.value = [];
   tasks.value = [
