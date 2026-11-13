@@ -37,6 +37,7 @@ const settings = (over: Partial<ScheduleSettings> = {}): ScheduleSettings => ({
     bufferBeforeMin: 45,
     bufferAfterMin: 75,
     totalHours: 500,
+    hourFactor: 1,
   },
   blockedDays: new Map(),
   ...over,
@@ -294,6 +295,21 @@ describe('automatic prácticas end date', () => {
     const s = auto();
     s.practicas.totalHours = 10;
     expect(practicasHours(s, '2026-10-01')).toMatchObject({ planned: 10, end: '2026-10-05' });
+  });
+});
+
+describe('hour factor', () => {
+  it('4 h worked count as 5 h with 1.25, so 500 h take 100 days', () => {
+    const s = withPracticas();
+    s.practicas.end = null;
+    s.practicas.hourFactor = 1.25;
+    // 1 Oct 2026 + 100 weekdays → Wednesday 17 Feb 2027.
+    expect(practicasHours(s, '2026-10-01')).toMatchObject({ planned: 500, end: '2027-02-17' });
+    // 1-9 Oct = 7 days done on 12 Oct → 35 h logged.
+    expect(practicasHours(s, '2026-10-12').done).toBe(35);
+    // The day itself still blocks 09:00-13:00.
+    expect(buildDay('2027-02-17', data(), s, MORNING).busy.map((b) => b.kind)).toEqual(['practicas']);
+    expect(buildDay('2027-02-18', data(), s, MORNING).busy).toEqual([]);
   });
 });
 

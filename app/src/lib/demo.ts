@@ -27,6 +27,7 @@ export function loadDemo(): void {
     practicas_start_min: 540,
     practicas_end_min: 780,
     practicas_total_hours: 500,
+    practicas_hour_factor: 1.25,
     practicas_buffer_before_min: 45,
     practicas_buffer_after_min: 75,
     last_synced_at: new Date().toISOString(),

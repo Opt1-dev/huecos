@@ -54,6 +54,8 @@ export interface PracticasConfig {
   bufferBeforeMin: number;
   bufferAfterMin: number;
   totalHours: number;
+  /** Hours counted per hour worked (1.25: 4 h worked = 5 h logged). */
+  hourFactor: number;
 }
 
 export interface ScheduleSettings {
@@ -165,14 +167,15 @@ const endCache = new WeakMap<ScheduleSettings, string | null>();
 
 /**
  * Last prácticas day. A fixed end date wins; otherwise it is the day on which
- * the cumulative hours (working weekdays, blocked days skipped) reach the target.
+ * the cumulative logged hours (working weekdays, blocked days skipped, worked
+ * hours × hourFactor) reach the target.
  */
 export function practicasEnd(s: ScheduleSettings): string | null {
   const p = s.practicas;
   if (!p.enabled || !p.start) return null;
   if (p.end) return p.end;
   if (endCache.has(s)) return endCache.get(s)!;
-  const perDay = (p.endMin - p.startMin) / 60;
+  const perDay = loggedPerDay(s);
   let end: string | null = null;
   if (perDay > 0 && p.weekdays.length > 0 && p.totalHours > 0) {
     let hours = 0;
@@ -190,6 +193,12 @@ export function practicasEnd(s: ScheduleSettings): string | null {
   return end;
 }
 
+/** Hours logged for one full prácticas day. */
+export function loggedPerDay(s: ScheduleSettings): number {
+  const p = s.practicas;
+  return ((p.endMin - p.startMin) / 60) * (p.hourFactor > 0 ? p.hourFactor : 1);
+}
+
 /** Is `date` a prácticas day? Returns the blocking reason when it is excluded by a blocked day. */
 export function practicasDay(date: string, s: ScheduleSettings): { on: boolean; blocked: BlockedKind | null } {
   const p = s.practicas;
@@ -199,16 +208,16 @@ export function practicasDay(date: string, s: ScheduleSettings): { on: boolean; 
 }
 
 /**
- * Prácticas hours: done before `today`, planned over the whole period (the
- * last day is shortened when the target is not a multiple of the daily hours),
- * the target and the last day.
+ * Prácticas hours, as logged (worked × hourFactor): done before `today`,
+ * planned over the whole period (the last day counts only what is still
+ * missing), the target and the last day.
  */
 export function practicasHours(
   s: ScheduleSettings,
   today: string,
 ): { done: number; planned: number; target: number; end: string | null } {
   const p = s.practicas;
-  const perDay = (p.endMin - p.startMin) / 60;
+  const perDay = loggedPerDay(s);
   const end = practicasEnd(s);
   let done = 0;
   let planned = 0;
