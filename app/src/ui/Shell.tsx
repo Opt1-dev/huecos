@@ -7,6 +7,7 @@ import { PlannerView } from './DayView';
 import { SettingsView } from './SettingsView';
 import { AdminView } from './AdminView';
 import { RendusView } from './RendusView';
+import { NotesView } from './NotesView';
 import { isAdmin, loadAdminFlag } from '../lib/admin';
 
 const TABS = [
@@ -126,6 +127,8 @@ export function Shell() {
           <SettingsView />
         ) : current === 'rendus' ? (
           <RendusView />
+        ) : current === 'notes' ? (
+          <NotesView />
         ) : current === 'admin' ? (
           <AdminView />
         ) : (

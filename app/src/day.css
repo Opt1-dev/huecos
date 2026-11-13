@@ -1010,3 +1010,51 @@ button.block.busy {
   align-items: center;
   gap: 6px;
 }
+
+/* Notes */
+.note-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.note-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border-left: 4px solid transparent;
+  min-width: 0;
+}
+.note-card.pinned {
+  border-left-color: var(--accent);
+}
+.note-card p {
+  margin: 0;
+}
+.note-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.note-title {
+  margin: 0;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+.note-head .badge {
+  flex: none;
+  background: var(--surface);
+  font-size: 0.72rem;
+}
+.note-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+.notes-filters {
+  align-items: end;
+}
