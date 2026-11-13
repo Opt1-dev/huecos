@@ -30,6 +30,7 @@ import { HideRepeatsDialog } from './HideRepeatsDialog';
 import { loggedPerDay, practicasHours, type Role } from '../engine/schedule';
 import { localDate } from '../../../supabase/functions/_shared/tz.ts';
 import { LanguagePicker } from './LanguagePicker';
+import { AccountSettings, SignupLinkSettings } from './AccountSettings';
 import { EntryForm, entrySummary } from './EntryForm';
 import { dayLabel, errorText, feedErrorMessage, minutesToInput, parseTimeInput, timeLabel, weekdayShort } from './format';
 
@@ -743,6 +744,8 @@ export function SettingsView() {
       </div>
       <div class="stack">
         <CalendarsSettings />
+        <SignupLinkSettings />
+        <AccountSettings />
       </div>
     </div>
   );
