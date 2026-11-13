@@ -140,8 +140,12 @@ These rules drive the free-time computation in `app/src/engine/schedule.ts`, a p
 - Overlapping busy blocks (events + buffers + timed tasks) are **merged first**.
 - Free slots shorter than **15 min** are ignored (a slot of exactly 15 min is kept).
 - Output per day: free slots, total free, longest slot, busy total, next slot.
-- **Auto-placement:** urgent + important tasks without a time go, oldest first, into the first free slot long enough within the next 48 h (start rounded up to 5 min). If none fits, the task says so.
-- Test cases: overlapping blocks, a shift ending after midnight, colliding buffers, a slot under 15 min, the DST change on 28 Mar 2027, an empty day, 48 h auto-placement with no slot available, a blocked day without prácticas.
+- **Auto-placement:** every task without a time is placed in free time, starts rounded up to 5 min. Order: urgent + important, then urgent, then important, then the rest; oldest first inside each.
+  - *Urgent + important* and *urgent, not important*: the first free slot long enough within the next 3 days (today included). If none, the task is split in 2 halves (rounded to 5 min), on 2 different days when possible.
+  - *Important, not urgent*: the longest free slot within 7 days of the day it was entered.
+  - *Neither*: the first free slot long enough within 14 days of the day it was entered.
+  - A task past its deadline gets the same span again from today. If nothing fits, the task says so.
+- Test cases: overlapping blocks, a shift ending after midnight, colliding buffers, a slot under 15 min, the DST change on 28 Mar 2027, an empty day, auto-placement per quadrant (split in 2, deadlines, overdue tasks, nothing free), a blocked day without prácticas.
 
 ## Roadmap
 

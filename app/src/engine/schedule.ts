@@ -1,6 +1,6 @@
 // Scheduling engine: pure functions, no I/O. Times are epoch milliseconds;
 // wall-clock positions are always derived through the user's time zone.
-import { addDays, isoWeekday, localDate, MINUTE, zonedToUtc } from '../../../supabase/functions/_shared/tz.ts';
+import { addDays, DAY_MIN, isoWeekday, localDate, MINUTE, zonedToUtc } from '../../../supabase/functions/_shared/tz.ts';
 
 export type Role = 'practicas' | 'work' | 'school' | 'gym' | 'activity' | 'deadlines' | 'main' | 'other';
 export type BlockedKind = 'non_school' | 'holiday';
@@ -133,7 +133,6 @@ export interface Interval {
 }
 
 export const DISPLAY_END_MIN = 1440 + 120; // 02:00 the next day
-export const AUTO_PLACE_HORIZON_MS = 48 * 60 * MINUTE;
 
 /** Sort and merge overlapping or touching intervals. */
 export function mergeIntervals(list: readonly Interval[]): Interval[] {
@@ -467,46 +466,143 @@ export function buildDay(
 
 export interface Placement {
   taskId: string;
-  block: Block | null;
+  /** One block, two when the task was split, none when nothing fits. */
+  blocks: Block[];
+}
+
+/** How far ahead each quadrant may be placed. */
+export const PLACEMENT_RULES = {
+  /** Urgent (quadrants 1 and 3): within the next 3 days, split in 2 if needed. */
+  urgentDays: 3,
+  /** Important, not urgent: within 7 days of the day it was entered. */
+  importantDays: 7,
+  /** Neither: within 14 days of the day it was entered. */
+  laterDays: 14,
+} as const;
+
+const STEP_MS = 5 * MINUTE;
+/** Urgent first, then important, then the rest. */
+const QUADRANT_ORDER: Record<TaskInput['quadrant'], number> = { 1: 0, 3: 1, 2: 2, 4: 3 };
+
+/** Free time still available for tasks, consumed as tasks are placed. */
+class FreeSlots {
+  private slots: Interval[];
+  constructor(slots: Interval[]) {
+    this.slots = slots;
+  }
+
+  /** Length of the slot available before `limitMs`. */
+  private room(slot: Interval, limitMs: number): number {
+    return Math.min(slot.endMs, limitMs) - slot.startMs;
+  }
+
+  /** First slot (in time order) that fits `need` before `limitMs`, optionally on another day. */
+  first(need: number, limitMs: number, accept: (slot: Interval) => boolean = () => true): Interval | null {
+    return this.slots.find((x) => this.room(x, limitMs) >= need && accept(x)) ?? null;
+  }
+
+  /** Slot with the most room before `limitMs` (earliest on a tie), if it fits `need`. */
+  largest(need: number, limitMs: number): Interval | null {
+    let best: Interval | null = null;
+    for (const x of this.slots) {
+      if (this.room(x, limitMs) >= need && (!best || this.room(x, limitMs) > this.room(best, limitMs))) best = x;
+    }
+    return best;
+  }
+
+  /** Take `need` from the start of `slot`; returns the taken interval. */
+  take(slot: Interval, need: number): Interval {
+    const taken = { startMs: slot.startMs, endMs: slot.startMs + need };
+    slot.startMs = Math.ceil((slot.startMs + need) / STEP_MS) * STEP_MS;
+    return taken;
+  }
+}
+
+/** End (exclusive) of the local day `days` after `date`. */
+function endOfDay(date: string, days: number, tz: string): number {
+  return zonedToUtc(addDays(date, days + 1), 0, tz);
 }
 
 /**
- * Urgent + important tasks without a time go, oldest first, into the first
- * free slot long enough within the next 48 h. Unplaceable tasks get null.
+ * Tasks without a time are placed automatically, quadrant by quadrant
+ * (urgent + important, urgent, important, neither), oldest first:
+ * - urgent (1 and 3): the first free slot long enough within 3 days; if none,
+ *   the task is split in 2 halves, put on 2 different days when possible;
+ * - important, not urgent (2): the longest free slot within 7 days of the day
+ *   it was entered;
+ * - neither (4): the first free slot long enough within 14 days of the day it
+ *   was entered.
+ * A task whose deadline has passed gets the same span again from today.
  */
 export function autoPlace(data: ScheduleData, s: ScheduleSettings, nowMs: number): Placement[] {
   const pending = data.tasks
-    .filter((t) => t.quadrant === 1 && !t.done && t.startMin === null)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    .filter((t) => !t.done && t.startMin === null)
+    .sort((a, b) => QUADRANT_ORDER[a.quadrant] - QUADRANT_ORDER[b.quadrant] || a.createdAt.localeCompare(b.createdAt));
   if (pending.length === 0) return [];
 
-  const horizon: Interval = { startMs: nowMs, endMs: nowMs + AUTO_PLACE_HORIZON_MS };
   const today = localDate(nowMs, s.tz);
-  const slots: Interval[] = [];
-  for (let i = 0; i <= 2; i++) {
+  const spanDays = (t: TaskInput) =>
+    t.quadrant === 2 ? PLACEMENT_RULES.importantDays : t.quadrant === 4 ? PLACEMENT_RULES.laterDays : PLACEMENT_RULES.urgentDays;
+  const limitOf = (t: TaskInput): number => {
+    const days = spanDays(t);
+    if (t.quadrant === 1 || t.quadrant === 3) return endOfDay(today, days - 1, s.tz);
+    const entered = localDate(Date.parse(t.createdAt), s.tz);
+    const limit = endOfDay(entered, days, s.tz);
+    return limit > nowMs ? limit : endOfDay(today, days, s.tz);
+  };
+
+  const lastDay = Math.max(...pending.map((t) => Math.ceil((limitOf(t) - nowMs) / (DAY_MIN * MINUTE)) + 1));
+  const intervals: Interval[] = [];
+  for (let i = 0; i <= lastDay; i++) {
     for (const f of buildDay(addDays(today, i), data, s, nowMs).free) {
-      const c = clip(f, horizon);
-      if (c) slots.push(c);
+      const startMs = Math.ceil(Math.max(f.startMs, nowMs) / STEP_MS) * STEP_MS;
+      if (f.endMs > startMs) intervals.push({ startMs, endMs: f.endMs });
     }
   }
-  // Start on a 5-minute boundary.
-  const step = 5 * MINUTE;
-  for (const slot of slots) slot.startMs = Math.ceil(slot.startMs / step) * step;
+  const free = new FreeSlots(intervals);
+  const block = (t: TaskInput, i: Interval, part?: string): Block => ({
+    kind: 'task',
+    startMs: i.startMs,
+    endMs: i.endMs,
+    title: part ? `${t.title} (${part})` : t.title,
+    taskId: t.id,
+    autoPlaced: true,
+  });
 
   return pending.map((t) => {
     const need = t.durationMin * MINUTE;
-    const slot = slots.find((x) => x.endMs - x.startMs >= need);
-    if (!slot) return { taskId: t.id, block: null };
-    const block: Block = { kind: 'task', startMs: slot.startMs, endMs: slot.startMs + need, title: t.title, taskId: t.id, autoPlaced: true };
-    slot.startMs += need;
-    return { taskId: t.id, block };
+    const limit = limitOf(t);
+
+    if (t.quadrant === 2) {
+      const slot = free.largest(need, limit);
+      return { taskId: t.id, blocks: slot ? [block(t, free.take(slot, need))] : [] };
+    }
+    const whole = free.first(need, limit);
+    if (whole) return { taskId: t.id, blocks: [block(t, free.take(whole, need))] };
+    if (t.quadrant === 4) return { taskId: t.id, blocks: [] };
+
+    // Urgent and nothing long enough: two halves, on two different days if possible.
+    const firstNeed = Math.ceil(t.durationMin / 2 / 5) * 5 * MINUTE;
+    const secondNeed = need - firstNeed;
+    if (secondNeed < MINUTE) return { taskId: t.id, blocks: [] };
+    const a = free.first(firstNeed, limit);
+    if (!a) return { taskId: t.id, blocks: [] };
+    const aDay = localDate(a.startMs, s.tz);
+    const afterA = (x: Interval) => x !== a && x.startMs >= a.startMs;
+    const b =
+      free.first(secondNeed, limit, (x) => afterA(x) && localDate(x.startMs, s.tz) !== aDay) ??
+      free.first(secondNeed, limit, afterA);
+    if (!b) return { taskId: t.id, blocks: [] };
+    const first = free.take(a, firstNeed);
+    const second = free.take(b, secondNeed);
+    return { taskId: t.id, blocks: [block(t, first, '1/2'), block(t, second, '2/2')] };
   });
 }
 
 /** Day plan including auto-placed tasks. */
 export function planDay(date: string, data: ScheduleData, s: ScheduleSettings, nowMs: number): { plan: DayPlan; placements: Placement[] } {
   const placements = autoPlace(data, s, nowMs);
-  const extra = placements.flatMap((p) => (p.block ? [p.block] : []));
+  const extra = placements.flatMap((p) => p.blocks);
   return { plan: buildDay(date, data, s, nowMs, extra), placements };
 }
 
@@ -529,7 +625,7 @@ export interface WeekPlan {
 export function planWeek(date: string, data: ScheduleData, s: ScheduleSettings, nowMs: number): WeekPlan {
   const start = weekStart(date);
   const placements = autoPlace(data, s, nowMs);
-  const extra = placements.flatMap((p) => (p.block ? [p.block] : []));
+  const extra = placements.flatMap((p) => p.blocks);
   const days = Array.from({ length: 7 }, (_, i) => buildDay(addDays(start, i), data, s, nowMs, extra));
   let longestFree: Block | null = null;
   for (const d of days) {

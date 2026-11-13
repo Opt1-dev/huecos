@@ -38,7 +38,9 @@ export function DayView() {
   );
 
   const dayTasks = tasks.value.filter(
-    (tk) => tk.day === date || placements.some((p) => p.taskId === tk.id && p.block && localDate(p.block.startMs, s.tz) === date),
+    (tk) =>
+      tk.day === date ||
+      placements.some((p) => p.taskId === tk.id && p.blocks.some((b) => localDate(b.startMs, s.tz) === date)),
   );
   const doneCount = dayTasks.filter((tk) => tk.done).length;
 
