@@ -72,7 +72,10 @@ begin
   perform public.disable_signup_code();
   if public.get_signup_code() is not null then raise exception 'link not disabled'; end if;
 
-  -- The sign-up code is removed from the new user's metadata.
+  -- A sign-up with the current code: the code is removed from the new
+  -- user's metadata (and, since admin_tab, the link is used up).
+  perform set_config('role', 'authenticated', true);
+  code := public.rotate_signup_code();
   perform set_config('role', 'postgres', true);
   insert into auth.users (id, email, aud, role, raw_user_meta_data)
   values (joined, 'joined@huecos.test', 'authenticated', 'authenticated', jsonb_build_object('signup_code', code, 'x', 1));
