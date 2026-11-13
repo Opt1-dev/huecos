@@ -3,6 +3,7 @@ import { locale, t } from '../i18n';
 import {
   banAccount,
   banEmail,
+  deleteAccount,
   disableSignupCode,
   getSignupCode,
   listAccounts,
@@ -202,28 +203,45 @@ function AccountsSection({ accounts, reload }: { accounts: AccountRow[] | null; 
                 </span>
               </div>
               {!a.is_admin && a.id !== me && (
-                <button
-                  type="button"
-                  class={a.banned ? 'btn small-btn' : 'btn small-btn danger'}
-                  disabled={busy || !online.value}
-                  onClick={() => {
-                    if (a.banned) {
+                <div class="actions">
+                  <button
+                    type="button"
+                    class={a.banned ? 'btn small-btn' : 'btn small-btn danger'}
+                    disabled={busy || !online.value}
+                    onClick={() => {
+                      if (a.banned) {
+                        void run(async () => {
+                          await unbanAccount(a.id);
+                          await reload();
+                          return { ok: true, text: tr('admin.unbannedDone', { email: a.email ?? '' }) };
+                        });
+                      } else if (confirm(tr('admin.confirmBan', { email: a.email ?? '' }))) {
+                        void run(async () => {
+                          await banAccount(a.id);
+                          await reload();
+                          return { ok: true, text: tr('admin.bannedDone', { email: a.email ?? '' }) };
+                        });
+                      }
+                    }}
+                  >
+                    {a.banned ? tr('admin.unban') : tr('admin.ban')}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn small-btn danger"
+                    disabled={busy || !online.value}
+                    onClick={() => {
+                      if (!confirm(tr('admin.confirmDelete', { email: a.email ?? '' }))) return;
                       void run(async () => {
-                        await unbanAccount(a.id);
+                        await deleteAccount(a.id);
                         await reload();
-                        return { ok: true, text: tr('admin.unbannedDone', { email: a.email ?? '' }) };
+                        return { ok: true, text: tr('admin.deletedDone', { email: a.email ?? '' }) };
                       });
-                    } else if (confirm(tr('admin.confirmBan', { email: a.email ?? '' }))) {
-                      void run(async () => {
-                        await banAccount(a.id);
-                        await reload();
-                        return { ok: true, text: tr('admin.bannedDone', { email: a.email ?? '' }) };
-                      });
-                    }
-                  }}
-                >
-                  {a.banned ? tr('admin.unban') : tr('admin.ban')}
-                </button>
+                    }}
+                  >
+                    {tr('admin.delete')}
+                  </button>
+                </div>
               )}
             </li>
           ))}
