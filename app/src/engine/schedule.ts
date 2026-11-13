@@ -457,3 +457,40 @@ export function planDay(date: string, data: ScheduleData, s: ScheduleSettings, n
   const extra = placements.flatMap((p) => (p.block ? [p.block] : []));
   return { plan: buildDay(date, data, s, nowMs, extra), placements };
 }
+
+/** Monday (ISO week start) of the week containing `date` (YYYY-MM-DD). */
+export function weekStart(date: string): string {
+  return addDays(date, 1 - isoWeekday(date));
+}
+
+export interface WeekPlan {
+  start: string;
+  days: DayPlan[];
+  placements: Placement[];
+  freeTotalMin: number;
+  busyTotalMin: number;
+  /** Longest free slot of the week, or null. */
+  longestFree: Block | null;
+}
+
+/** Seven day plans (Monday to Sunday) sharing one auto-placement pass. */
+export function planWeek(date: string, data: ScheduleData, s: ScheduleSettings, nowMs: number): WeekPlan {
+  const start = weekStart(date);
+  const placements = autoPlace(data, s, nowMs);
+  const extra = placements.flatMap((p) => (p.block ? [p.block] : []));
+  const days = Array.from({ length: 7 }, (_, i) => buildDay(addDays(start, i), data, s, nowMs, extra));
+  let longestFree: Block | null = null;
+  for (const d of days) {
+    for (const f of d.free) {
+      if (!longestFree || f.endMs - f.startMs > longestFree.endMs - longestFree.startMs) longestFree = f;
+    }
+  }
+  return {
+    start,
+    days,
+    placements,
+    freeTotalMin: days.reduce((sum, d) => sum + d.freeTotalMin, 0),
+    busyTotalMin: days.reduce((sum, d) => sum + d.busyTotalMin, 0),
+    longestFree,
+  };
+}

@@ -3,7 +3,7 @@ import { t, type MessageKey } from '../i18n';
 import { online, signOut } from '../lib/session';
 import { useEffect } from 'preact/hooks';
 import { clearCache, loadAll, startRealtime, stopRealtime } from '../lib/data';
-import { DayView } from './DayView';
+import { PlannerView } from './DayView';
 import { SettingsView } from './SettingsView';
 
 const TABS = [
@@ -102,7 +102,7 @@ export function Shell() {
         tabIndex={0}
       >
         {activeTab.value === 'day' ? (
-          <DayView />
+          <PlannerView />
         ) : activeTab.value === 'settings' ? (
           <SettingsView />
         ) : (

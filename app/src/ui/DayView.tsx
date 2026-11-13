@@ -1,25 +1,26 @@
-import { signal } from '@preact/signals';
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useMemo, useState } from 'preact/hooks';
 import { t } from '../i18n';
-import { calendars, fromCache, loaded, scheduleData, scheduleSettings, settingsRow, syncing, syncNow, tasks, clearOverride } from '../lib/data';
+import { calendars, loaded, scheduleData, scheduleSettings, tasks, clearOverride } from '../lib/data';
 import { online } from '../lib/session';
 import { planDay, type Block } from '../engine/schedule';
 import { addDays, localDate } from '../../../supabase/functions/_shared/tz.ts';
 import { Timeline } from './Timeline';
 import { EventDialog } from './EventDialog';
 import { TasksPanel } from './TasksPanel';
-import { dayLabel, durationLabel, errorText, timeLabel } from './format';
+import { WeekView } from './WeekView';
+import { dayLabel, durationLabel, timeLabel } from './format';
+import { selectedDate, SyncBar, useNow, viewMode, ViewSwitch } from './planner';
 
-const selectedDate = signal<string | null>(null);
-
-/** Re-render every minute so "now" and the next slot stay current. */
-function useNow(): number {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(id);
-  }, []);
-  return now;
+/** "Ma journée" tab: day or week, as last chosen. */
+export function PlannerView() {
+  const tr = t.value;
+  if (!loaded.value) return <p class="muted">{tr('common.loading')}</p>;
+  return (
+    <div class="stack">
+      <ViewSwitch />
+      {viewMode.value === 'week' ? <WeekView /> : <DayView />}
+    </div>
+  );
 }
 
 export function DayView() {
@@ -29,7 +30,6 @@ export function DayView() {
   const today = localDate(now, s.tz);
   const date = selectedDate.value ?? today;
   const [selected, setSelected] = useState<Block | null>(null);
-  const [syncError, setSyncError] = useState<string | null>(null);
 
   const { plan, placements } = useMemo(
     () => planDay(date, scheduleData.value, s, now),
@@ -40,15 +40,12 @@ export function DayView() {
     (tk) => tk.day === date || placements.some((p) => p.taskId === tk.id && p.block && localDate(p.block.startMs, s.tz) === date),
   );
   const doneCount = dayTasks.filter((tk) => tk.done).length;
-  const lastSynced = settingsRow.value?.last_synced_at;
 
   const quick = [
     { label: tr('day.today'), value: today },
     { label: tr('day.tomorrow'), value: addDays(today, 1) },
     { label: tr('day.afterTomorrow'), value: addDays(today, 2) },
   ];
-
-  if (!loaded.value) return <p class="muted">{tr('common.loading')}</p>;
 
   return (
     <div class="stack">
@@ -79,33 +76,7 @@ export function DayView() {
         </label>
       </div>
 
-      <div class="sync-bar small">
-        <span class="muted">
-          {lastSynced ? tr('status.lastSynced', { time: timeLabel(Date.parse(lastSynced), s.tz) }) : tr('sync.never')}
-          {fromCache.value && ` · ${tr('status.cached')}`}
-        </span>
-        {!online.value && <span class="badge warn">{tr('status.offline')}</span>}
-        <button
-          type="button"
-          class="btn"
-          disabled={syncing.value || !online.value}
-          onClick={() =>
-            void syncNow()
-              .then((r) => setSyncError(r.error ? tr('sync.error', { code: r.error }) : null))
-              .catch((e) => setSyncError(errorText(e)))
-          }
-        >
-          {syncing.value ? tr('sync.running') : tr('sync.button')}
-        </button>
-        <a class="btn ghost" href="https://claude.ai/new" target="_blank" rel="noopener noreferrer">
-          {tr('day.writeClaude')}
-        </a>
-      </div>
-      {syncError && (
-        <p role="alert" class="error small">
-          {syncError}
-        </p>
-      )}
+      <SyncBar tz={s.tz} />
 
       <h2 class="day-title">{dayLabel(date)}</h2>
 

@@ -119,6 +119,7 @@ A user's settings row is created automatically at sign-up; an invitation with ro
 - `sync-calendars` runs every 15 min from pg_cron (all users) or from the **Synchroniser** button (that user only, at most every 30 s). It expands each feed from 7 days ago to 60 days ahead with ical.js: RRULE/RDATE/EXDATE, moved occurrences (RECURRENCE-ID), all-day events, TZID with or without VTIMEZONE, UTC, `STATUS:CANCELLED`. It upserts the occurrences and deletes the ones that disappeared from the feed.
 - Classification: titles starting with "Vencimiento de" and every event of a *Deadlines* calendar are deadlines (shown, never busy); "Entrega …" events of the *Main* calendar are study sessions (busy, shown as "Session d'étude"); all-day events never block time.
 - Offline: the last loaded data is kept in IndexedDB, the day view works without network, and the header shows "Dernière synchro hh:mm" and "Hors ligne".
+- Week view: "Ma journée" has a Jour / Semaine switch (remembered per device). The week runs Monday to Sunday with each day's free time, the week totals and the longest slot; tap a day to open it. On a phone the columns scroll sideways and start on today.
 
 ## Scheduling rules
 
