@@ -5,13 +5,21 @@ import { useEffect } from 'preact/hooks';
 import { clearCache, loadAll, startRealtime, stopRealtime } from '../lib/data';
 import { PlannerView } from './DayView';
 import { SettingsView } from './SettingsView';
+import { AdminView } from './AdminView';
+import { isAdmin, loadAdminFlag } from '../lib/admin';
 
 const TABS = [
   { id: 'day', label: 'tabs.day' },
   { id: 'rendus', label: 'tabs.rendus' },
   { id: 'notes', label: 'tabs.notes' },
   { id: 'settings', label: 'tabs.settings' },
+  { id: 'admin', label: 'tabs.admin' },
 ] as const satisfies readonly { id: string; label: MessageKey }[];
+
+/** The Admin tab only exists for admins. */
+function visibleTabs() {
+  return TABS.filter((tab) => tab.id !== 'admin' || isAdmin.value === true);
+}
 
 type TabId = (typeof TABS)[number]['id'];
 
@@ -36,19 +44,24 @@ function selectTab(id: TabId) {
 }
 
 function onTabKeyDown(event: KeyboardEvent) {
-  const index = TABS.findIndex((tab) => tab.id === activeTab.value);
+  const tabs = visibleTabs();
+  const index = tabs.findIndex((tab) => tab.id === activeTab.value);
   const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
   if (!delta) return;
   event.preventDefault();
-  const next = TABS[(index + delta + TABS.length) % TABS.length]!;
+  const next = tabs[(index + delta + tabs.length) % tabs.length]!;
   selectTab(next.id);
   document.getElementById(`tab-${next.id}`)?.focus();
 }
 
 export function Shell() {
   const tr = t.value;
+  const tabs = visibleTabs();
+  // A saved "admin" tab for someone who isn't (or is no longer) an admin.
+  const current = activeTab.value === 'admin' && isAdmin.value !== true ? 'day' : activeTab.value;
   useEffect(() => {
     void loadAll();
+    void loadAdminFlag();
     startRealtime();
     const reload = () => {
       if (document.visibilityState === 'visible') void loadAll();
@@ -61,6 +74,11 @@ export function Shell() {
       window.removeEventListener('online', reload);
     };
   }, []);
+  // On a phone the tab bar scrolls sideways: keep the selected tab visible.
+  useEffect(() => {
+    document.getElementById(`tab-${current}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [current, tabs.length]);
+
   return (
     <div class="shell">
       <header class="topbar">
@@ -74,8 +92,8 @@ export function Shell() {
       </header>
 
       <nav class="tabs" role="tablist" aria-label={tr('tabs.label')} onKeyDown={onTabKeyDown}>
-        {TABS.map((tab) => {
-          const selected = tab.id === activeTab.value;
+        {tabs.map((tab) => {
+          const selected = tab.id === current;
           return (
             <button
               key={tab.id}
@@ -95,20 +113,22 @@ export function Shell() {
       </nav>
 
       <main
-        id={`panel-${activeTab.value}`}
+        id={`panel-${current}`}
         role="tabpanel"
-        aria-labelledby={`tab-${activeTab.value}`}
+        aria-labelledby={`tab-${current}`}
         class="panel"
         tabIndex={0}
       >
-        {activeTab.value === 'day' ? (
+        {current === 'day' ? (
           <PlannerView />
-        ) : activeTab.value === 'settings' ? (
+        ) : current === 'settings' ? (
           <SettingsView />
+        ) : current === 'admin' ? (
+          <AdminView />
         ) : (
           <div class="columns">
             <section class="card">
-              <h2>{tr(TABS.find((tab) => tab.id === activeTab.value)!.label)}</h2>
+              <h2>{tr(TABS.find((tab) => tab.id === current)!.label)}</h2>
               <p class="muted">{tr('placeholder.comingSoon')}</p>
             </section>
           </div>

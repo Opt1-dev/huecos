@@ -19,7 +19,7 @@ Huecos is a phone-first PWA that shows your **real free time** and organises you
 - **Typed i18n dictionaries:** French is the reference; a unit test fails if Spanish or English miss a key or a `{placeholder}`.
 - **Publishable key in the browser:** it only identifies the project; every table is protected by RLS.
 - **Invite-only through an Auth hook:** Postgres rejects any sign-up whose email is not in `public.invitations` and that doesn't carry the current sign-up link code, so nobody can create an account by calling the API directly.
-- **Sign-up link:** admins get a permanent link (`…/huecos/?join=<code>`) in Réglages → *Lien d'inscription*: copy, share, replace (the old link stops working) or disable. Anyone with it creates an account with email + password (8+ characters). The code is checked by the hook and removed from the new user's metadata. With *Confirm email* off in Auth settings, the account is active at once (no email, so no email rate limit).
+- **Admin tab** (admins only): a **single-use sign-up link** (`…/huecos/?join=<code>`): one account per link, then it is used up (if two people use it at once, only the first gets an account); copy, share, replace or disable it. Anyone with it creates an account with email + password (8+ characters); the code is checked by the hook and removed from the new user's metadata. With *Confirm email* off, the account is active at once. The tab also lists every account (joined, last sign-in, admin, banned) and bans: a banned account can't sign in (sessions ended, `banned_until` set, data kept) and a banned email can't sign up; unban restores both. Admins can't be banned.
 - **Sign-in:** email + password, or an email link. *Mot de passe oublié ?* sends a reset email; the app then asks for a new password. Réglages → *Compte* sets or changes the password.
 - **`app_private` schema:** helpers, hooks and the admin list live in a schema the Data API does not expose.
 - **Exact dependency versions + committed lockfile:** reproducible builds and less supply-chain risk.
@@ -113,6 +113,7 @@ Merging a pull request into `main` runs `deploy.yml`:
 | `public.tasks` | Tasks with quadrant (1 urgent+important … 4 neither), optional day/time, duration 15 min–4 h | Owner |
 | `public.blocked_days` | Non-school days and holidays (no prácticas) | Owner |
 | `app_private.signup_link` | The current sign-up link code (one row, or none = disabled) | Not exposed; read by the Auth hook; admin RPCs `get_signup_code`, `rotate_signup_code`, `disable_signup_code`, `am_i_admin` |
+| `app_private.banned_emails` | Emails refused at sign-up | Not exposed; read by the Auth hook; admin RPCs `admin_list_users`, `admin_ban_user`, `admin_unban_user`, `admin_list_banned_emails`, `admin_ban_email`, `admin_unban_email` |
 | `app_private.admins` | Users who manage invitations | Not exposed |
 | `vault.secrets` | Encrypted calendar feed URLs and the cron secret | Service role only |
 

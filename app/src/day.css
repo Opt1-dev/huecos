@@ -762,3 +762,60 @@ button.block.busy {
   color: var(--muted);
   font-size: 0.7rem;
 }
+
+/* Admin tab */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.section-head h2 {
+  margin: 0;
+}
+.admin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.admin-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.admin-row.banned strong {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.admin-row-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 220px;
+}
+.admin-row-text strong {
+  overflow-wrap: anywhere;
+}
+.admin-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.admin-badges:empty {
+  display: none;
+}
+.admin-badges .badge {
+  background: var(--surface);
+  font-size: 0.72rem;
+}
+.admin-badges .badge.warn {
+  background: var(--warn-bg);
+}

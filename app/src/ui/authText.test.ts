@@ -12,6 +12,9 @@ describe('authErrorText', () => {
     ['For security purposes, you can only request this after 42 seconds.', 'login.rateLimited'],
     ['Email not confirmed', 'login.notConfirmed'],
     ['Password should be at least 6 characters.', 'join.weak'],
+    ['User is banned', 'login.banned'],
+    ['This email address is banned from Huecos.', 'login.banned'],
+    ['Database error saving new user', 'join.badCode'],
   ] as const)('%s', (message, key) => {
     expect(authErrorText(message)).toBe(tr(key));
   });
