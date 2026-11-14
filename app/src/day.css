@@ -1230,3 +1230,64 @@ button.block.busy {
     height: auto;
   }
 }
+
+/* Action requise */
+.tab-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 0.72rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.hit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.hit-row {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border-left: 4px solid var(--accent);
+  min-width: 0;
+}
+.hit-row.done {
+  border-left-color: transparent;
+}
+.hit-row.done .hit-subject {
+  color: var(--muted);
+}
+.hit-row p {
+  margin: 0;
+}
+.hit-head {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.hit-subject {
+  overflow-wrap: anywhere;
+}
+.hit-snippet {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  opacity: 0.85;
+}
+.keyword-chip {
+  font-size: 0.78rem;
+}
+.notice.ok {
+  background: color-mix(in srgb, var(--free) 18%, transparent);
+  color: var(--text);
+}

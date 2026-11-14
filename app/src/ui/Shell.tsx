@@ -9,11 +9,14 @@ import { AdminView } from './AdminView';
 import { RendusView } from './RendusView';
 import { NotesView } from './NotesView';
 import { isAdmin, loadAdminFlag } from '../lib/admin';
+import { ActionsView, mailErrorText, mailReturnMessage } from './ActionsView';
+import { loadMail, mailHits, startMailRealtime, stopMailRealtime, takeMailReturn } from '../lib/mail';
 
 const TABS = [
   { id: 'day', label: 'tabs.day' },
   { id: 'rendus', label: 'tabs.rendus' },
   { id: 'notes', label: 'tabs.notes' },
+  { id: 'actions', label: 'tabs.actions' },
   { id: 'settings', label: 'tabs.settings' },
   { id: 'admin', label: 'tabs.admin' },
 ] as const satisfies readonly { id: string; label: MessageKey }[];
@@ -59,19 +62,33 @@ function onTabKeyDown(event: KeyboardEvent) {
 export function Shell() {
   const tr = t.value;
   const tabs = visibleTabs();
+  const pending = mailHits.value.filter((h) => !h.done).length;
   // A saved "admin" tab for someone who isn't (or is no longer) an admin.
   const current = activeTab.value === 'admin' && isAdmin.value !== true ? 'day' : activeTab.value;
   useEffect(() => {
     void loadAll();
     void loadAdminFlag();
+    void loadMail().catch(() => undefined);
     startRealtime();
+    startMailRealtime();
+    // Back from Microsoft's sign-in: show the result in "Action requise".
+    const ret = takeMailReturn();
+    if (ret) {
+      selectTab('actions');
+      mailReturnMessage.value = ret.ok
+        ? { ok: true, text: t.value('act.connected') }
+        : { ok: false, text: t.value('act.connectFailed', { reason: mailErrorText(ret.reason) }) };
+    }
     const reload = () => {
-      if (document.visibilityState === 'visible') void loadAll();
+      if (document.visibilityState !== 'visible') return;
+      void loadAll();
+      void loadMail().catch(() => undefined);
     };
     document.addEventListener('visibilitychange', reload);
     window.addEventListener('online', reload);
     return () => {
       stopRealtime();
+      stopMailRealtime();
       document.removeEventListener('visibilitychange', reload);
       window.removeEventListener('online', reload);
     };
@@ -109,6 +126,11 @@ export function Shell() {
               onClick={() => selectTab(tab.id)}
             >
               {tr(tab.label)}
+              {tab.id === 'actions' && pending > 0 && (
+                <span class="tab-badge" aria-label={tr('act.pending', { n: pending })}>
+                  {pending}
+                </span>
+              )}
             </button>
           );
         })}
@@ -129,6 +151,8 @@ export function Shell() {
           <RendusView />
         ) : current === 'notes' ? (
           <NotesView />
+        ) : current === 'actions' ? (
+          <ActionsView />
         ) : current === 'admin' ? (
           <AdminView />
         ) : (

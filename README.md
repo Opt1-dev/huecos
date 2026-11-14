@@ -89,6 +89,18 @@ Nothing secret is committed. Create these once.
 
 Settings → Pages → Source: **GitHub Actions** (already enabled). The repository is **public** because GitHub Pages on a free plan only publishes public repositories; nothing secret lives in the code: keys and passwords are GitHub secrets or Supabase settings, and every user's data is protected by RLS.
 
+### Microsoft sign-in for "Action requise"
+
+1. In the [Microsoft Entra admin center](https://entra.microsoft.com) → *App registrations* → *New registration*:
+   - Name: `Huecos`.
+   - Supported account types: **Accounts in any organizational directory and personal Microsoft accounts**.
+   - Redirect URI: platform **Web**, `https://<project-ref>.supabase.co/functions/v1/mail-oauth-callback`.
+2. *API permissions*: Microsoft Graph, delegated: `offline_access`, `openid`, `email`, `User.Read`, `Mail.Read` (all user-consentable; a school or company tenant may still require an admin's approval).
+3. *Certificates & secrets* → *New client secret*.
+4. Supabase dashboard → *Edge Functions* → *Secrets*: `MS_CLIENT_ID` (the *Application (client) ID*) and `MS_CLIENT_SECRET` (the secret's **Value**). Never put them in the repository.
+
+The secret expires (6–24 months): create a new one before then and replace `MS_CLIENT_SECRET`.
+
 ## Deploying
 
 Merging a pull request into `main` runs `deploy.yml`:
@@ -107,6 +119,9 @@ Merging a pull request into `main` runs `deploy.yml`:
 | `public.settings` | One row per user: language, time zone, free-time window, minimum slot, modules, prácticas settings, last sync | Owner only (read/update) |
 | `public.calendars` | A user's calendars: name, role, colour, buffers before/after, counts as busy, source (`feed` or `manual`), hidden event titles, work per deadline and max per day, feed host, last sync/error | Owner; `feed_secret_id` can't be written by the browser; `source` is set once; a manual calendar never has a feed |
 | `public.deadline_done` | Deadline events marked done (no more work placed) | Owner, only for their own events |
+| `public.mail_accounts` | Connected mailboxes: provider, address, checked until, last check/error; the refresh token is in Vault | Owner reads (not the Vault reference) and disconnects; only the Edge Functions write |
+| `public.mail_keywords` | Keywords with an optional sender filter | Owner |
+| `public.mail_hits` | Mails containing a keyword: subject, sender, date, excerpt (≤ 400), keywords, web link, done | Owner reads, marks done, deletes; only check-mail writes |
 | `public.notes` | Notes: title, optional subject (unlinked if the subject is deleted), text up to 5,000 characters, pinned. `updated_at` follows content edits only, not pinning | Owner; subject must be theirs |
 | `public.subjects` | Subjects: name (unique per user, case-insensitive), colour slot 0–7 | Owner |
 | `public.rendus` | Assignments: optional deadline event (one rendu per event, kept unlinked if the event goes), subject (can't be deleted while used), title, due date, state `todo|done|submitted|graded`, grade 0–10, note | Owner; event and subject must be theirs. Triggers keep it in step with `deadline_done`: a rendu past "todo" marks its deadline done, back to "todo" or deleted unmarks it; marking a deadline done moves its rendu to "done" (creating it, prefix removed, local due date) and unmarking moves "done" back to "todo" |
@@ -137,6 +152,13 @@ A user's settings row is created automatically at sign-up; an invitation with ro
 - Form: title, optional subject, text (5,000 characters max, with a counter).
 - List: pinned first, then most recently modified. Each note shows its title, subject, text (line breaks kept), "Modifiée le …", and Épingler / Modifier (in the writing area: Enregistrer / Annuler) / Supprimer.
 - Search in title and text (case and accents ignored, every word must appear) and filter by subject, including "Sans matière".
+
+## Action requise
+
+- **Mailboxes:** "Se connecter avec Microsoft" (OAuth 2.0 authorization code with PKCE, confidential client). `mail-connect` creates a single-use state (10 minutes) and returns Microsoft's sign-in URL; `mail-oauth-callback` exchanges the code, reads the address from Graph `/me`, stores the **refresh token in Vault** and sends the user back with `?mail=connected` or `?mail=error&reason=…` (only to allowed app origins). Huecos never sees the password. Disconnecting deletes the token and the found mails. Gmail comes next.
+- **Keywords:** each with an optional sender filter (address or name contains it). Case and accents ignored.
+- **check-mail** (every 15 minutes from pg_cron with the same Vault secret as the calendar sync, or **Vérifier maintenant**, at most every 30 s): refreshes the access token (the refresh token is replaced when Microsoft rotates it), reads the inbox mails received since the last check (5-minute overlap, 200 per run), and records those whose subject or text contains a keyword, with an **excerpt of at most 240 characters** around it. The whole mail is never stored. An expired or revoked access shows "Reconnecter".
+- **Mails à traiter:** newest first with subject, sender, date, keywords found, excerpt, **Ouvrir le mail** (Outlook web link) and **Traité**; handled ones are in a collapsed list that can be cleared. The tab shows a badge with the number to handle; new matches appear live (Realtime).
 
 ## Calendar sync
 
@@ -180,5 +202,5 @@ These rules drive the free-time computation in `app/src/engine/schedule.ts`, a p
 - **Phase 1:** calendars and feed settings, `sync-calendars` Edge Function + pg_cron, scheduling engine, "Ma journée".
 - **Phase 2:** "Rendus et notes" (done; no import from "Ma journée", by choice).
 - **Phase 3:** "Notes" (done).
-- **Phase 4:** Outlook corrections block (Microsoft Graph, per user).
+- **Phase 4:** "Action requise": mailbox keywords → mails to handle. Microsoft done; Gmail next.
 - **Phase 5:** PWA polish (install, offline, icons) and deployment.

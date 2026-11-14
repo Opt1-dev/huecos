@@ -4,6 +4,7 @@ import type { Session } from '@supabase/supabase-js';
 import { session } from './session';
 import { blockedDays, calendars, entries, events, loaded, notes, overrides, rendus, settingsRow, subjects, tasks, type EventRow } from './data';
 import { addDays, localDate, zonedToUtc } from '../../../supabase/functions/_shared/tz.ts';
+import { mailAccounts, mailHits, mailKeywords } from './mail';
 
 export function loadDemo(): void {
   const tz = 'Europe/Madrid';
@@ -88,6 +89,18 @@ export function loadDemo(): void {
     { id: 'n7', subject_id: null, title: 'The Buffer Club : réunion', body: 'Jeudi 19 h.', pinned: false, created_at: '2026-11-04T10:00:00Z', updated_at: '2026-11-06T10:00:00Z' },
     { id: 'n8', subject_id: 's2', title: 'Projet DAW : idées', body: 'Gestion de réservations ?', pinned: false, created_at: '2026-10-25T10:00:00Z', updated_at: '2026-10-30T10:00:00Z' },
     { id: 'n9', subject_id: 's2', title: 'Projet DAW : planning', body: 'Maquettes en novembre, code en décembre.', pinned: false, created_at: '2026-10-26T10:00:00Z', updated_at: '2026-11-01T10:00:00Z' },
+  ];
+  mailAccounts.value = [
+    { id: 'mb1', provider: 'microsoft', address: 'tomas@cesur.example', last_checked_at: new Date().toISOString(), last_error: null, created_at: '2026-11-10T10:00:00Z' },
+  ];
+  mailKeywords.value = [
+    { id: 'k1', keyword: 'retroalimentación', sender: 'cesurformacion.com' },
+    { id: 'k2', keyword: 'urgent', sender: null },
+  ];
+  mailHits.value = [
+    { id: 'h1', account_id: 'mb1', subject: 'María López ha hecho un comentario en la tarea UT4 – Formularios', sender_name: 'Plataforma CESUR', sender_address: 'noreply-plataforma@cesurformacion.com', received_at: iso(today, 9 * 60 + 12), snippet: '…la profesora ha aportado alguna retroalimentación en su entrega de la tarea UT4 – Formularios. Puede consultarla en…', keywords: ['retroalimentación'], web_link: 'https://outlook.office.com/mail/', done: false },
+    { id: 'h2', account_id: 'mb1', subject: 'Cambio de horario – urgent', sender_name: 'Secretaría', sender_address: 'secretaria@cesur.example', received_at: iso(addDays(today, -1), 17 * 60 + 40), snippet: 'Cambio de horario – urgent', keywords: ['urgent'], web_link: 'https://outlook.office.com/mail/', done: false },
+    { id: 'h3', account_id: 'mb1', subject: 'Juan Pérez ha hecho un comentario en la tarea UT2', sender_name: 'Plataforma CESUR', sender_address: 'noreply-plataforma@cesurformacion.com', received_at: iso(addDays(today, -4), 11 * 60), snippet: '…ha aportado alguna retroalimentación en su entrega…', keywords: ['retroalimentación'], web_link: null, done: true },
   ];
   overrides.value = [];
   tasks.value = [
