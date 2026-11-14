@@ -1047,8 +1047,11 @@ button.block.busy {
   background: var(--surface-2);
   overflow: hidden;
 }
+/* The drawing never sizes the map: it fills it. */
 .note-map svg {
   display: block;
+  position: absolute;
+  inset: 0;
 }
 .note-map-empty {
   position: absolute;

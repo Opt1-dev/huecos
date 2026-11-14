@@ -132,8 +132,10 @@ A user's settings row is created automatically at sign-up; an invitation with ro
 
 ## Notes
 
+- Layout: on wide screens the tab is split in three: the **note map** across the top third, the **writing area** bottom left (new note, or the note being edited) and the **titles** bottom right (collapsible to read each note). On phones and narrow windows the three zones stack.
+- Note map: each note is a point (coloured by subject, bigger when pinned) on a plain background; a line joins two notes whose titles share a word (3+ letters, case and accents ignored, common FR/ES/EN short words left out). The layout is computed once per set of notes (deterministic), then stretched to fill the map. Labels show where they fit without overlapping; hovering or focusing a point highlights its links and shows the shared words; clicking it opens the note in the list.
 - Form: title, optional subject, text (5,000 characters max, with a counter).
-- List: pinned first, then most recently modified. Each note shows its title, subject, text (line breaks kept), "Modifiée le …", and Épingler / Modifier (inline: title, subject, text, Enregistrer / Annuler) / Supprimer.
+- List: pinned first, then most recently modified. Each note shows its title, subject, text (line breaks kept), "Modifiée le …", and Épingler / Modifier (in the writing area: Enregistrer / Annuler) / Supprimer.
 - Search in title and text (case and accents ignored, every word must appear) and filter by subject, including "Sans matière".
 
 ## Calendar sync

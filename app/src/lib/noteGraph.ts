@@ -44,6 +44,9 @@ export function noteLinks(notes: readonly NoteNode[]): NoteLink[] {
   return links;
 }
 
+/** Pull towards the centre, so unlinked notes don't end up against the edges. */
+const GRAVITY = 0.6;
+
 /** Deterministic pseudo-random numbers from a string seed. */
 function seeded(seed: string): () => number {
   let h = 2166136261;
@@ -82,7 +85,7 @@ export function layoutGraph(nodes: readonly NoteNode[], links: readonly NoteLink
   const rand = seeded(nodes.map((d) => d.id).join('|'));
   for (const d of nodes) pos.set(d.id, { x: margin + rand() * (width - 2 * margin), y: margin + rand() * (1 - 2 * margin) });
 
-  const k = 0.9 * Math.sqrt(width / n);
+  const k = 0.5 * Math.sqrt(width / n);
   const linked = links.filter((l) => pos.has(l.a) && pos.has(l.b));
   let temp = width / 8;
   const cooling = temp / (iterations + 1);
@@ -125,14 +128,30 @@ export function layoutGraph(nodes: readonly NoteNode[], links: readonly NoteLink
       const p = pos.get(d.id)!;
       const v = disp.get(d.id)!;
       // Light pull towards the centre so unlinked notes don't stick to the edges.
-      v.x += (width / 2 - p.x) * 0.15 * k;
-      v.y += (0.5 - p.y) * 0.15 * k;
+      v.x += (width / 2 - p.x) * GRAVITY;
+      v.y += (0.5 - p.y) * GRAVITY;
       const len = Math.max(Math.hypot(v.x, v.y), 1e-9);
       const step = Math.min(len, temp);
       p.x = clampX(p.x + (v.x / len) * step);
       p.y = clampY(p.y + (v.y / len) * step);
     }
     temp = Math.max(temp - cooling, 0.002);
+  }
+  return fillBox(pos, width, margin);
+}
+
+/** Stretch the drawing so it fills the box (inside the margin) in both directions. */
+function fillBox(pos: Map<string, Point>, width: number, margin: number): Map<string, Point> {
+  const ps = [...pos.values()];
+  const minX = Math.min(...ps.map((p) => p.x));
+  const maxX = Math.max(...ps.map((p) => p.x));
+  const minY = Math.min(...ps.map((p) => p.y));
+  const maxY = Math.max(...ps.map((p) => p.y));
+  const fit = (v: number, lo: number, hi: number, size: number) =>
+    hi - lo < 1e-6 ? size / 2 : margin + ((v - lo) / (hi - lo)) * (size - 2 * margin);
+  for (const p of ps) {
+    p.x = fit(p.x, minX, maxX, width);
+    p.y = fit(p.y, minY, maxY, 1);
   }
   return pos;
 }

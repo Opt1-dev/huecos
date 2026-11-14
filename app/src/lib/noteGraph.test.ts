@@ -64,3 +64,25 @@ describe('layoutGraph', () => {
     expect(layoutGraph([{ id: 'x', title: 'x' }], [], 4).get('x')).toEqual({ x: 2, y: 0.5 });
   });
 });
+
+describe('layoutGraph spread', () => {
+  const titles = ['Idées de week-end', 'Formulaires : points clés', 'Vocabulary', 'Formulaires : validation', 'Logo The Buffer Club', 'Couleurs du logo', 'The Buffer Club : réunion', 'Projet DAW : idées', 'Projet DAW : planning'];
+  const nodes = titles.map((title, i) => ({ id: `n${i + 1}`, title }));
+
+  it('fills the box and keeps points apart, even on a wide map', () => {
+    const pos = [...layoutGraph(nodes, noteLinks(nodes), 1).values()];
+    const xs = pos.map((p) => p.x);
+    const ys = pos.map((p) => p.y);
+    expect(Math.min(...xs)).toBeCloseTo(0.08, 5);
+    expect(Math.max(...xs)).toBeCloseTo(0.92, 5);
+    expect(Math.min(...ys)).toBeCloseTo(0.08, 5);
+    expect(Math.max(...ys)).toBeCloseTo(0.92, 5);
+    // On a 1134 × 195 px map (desktop) and 343 × 220 px (phone), points stay 30 px+ apart.
+    for (const [w, h] of [[1134, 195], [343, 220]] as const) {
+      let min = Infinity;
+      for (let i = 0; i < pos.length; i++)
+        for (let j = i + 1; j < pos.length; j++) min = Math.min(min, Math.hypot((pos[i]!.x - pos[j]!.x) * w, (pos[i]!.y - pos[j]!.y) * h));
+      expect(min).toBeGreaterThan(30);
+    }
+  });
+});
