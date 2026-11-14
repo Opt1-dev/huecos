@@ -436,3 +436,22 @@ import_map = "./functions/sync-calendars/deno.json"
 enabled = true
 verify_jwt = true
 import_map = "./functions/save-feed/deno.json"
+
+[functions.mail-connect]
+enabled = true
+verify_jwt = true
+import_map = "./functions/mail-connect/deno.json"
+
+[functions.mail-oauth-callback]
+enabled = true
+# Microsoft sends the browser here: no Supabase session; the single-use
+# OAuth state (10 minutes) proves who started the sign-in.
+verify_jwt = false
+import_map = "./functions/mail-oauth-callback/deno.json"
+
+[functions.check-mail]
+enabled = true
+# Called by pg_cron with x-cron-secret, or by a user with their session JWT
+# (checked in the function itself).
+verify_jwt = false
+import_map = "./functions/check-mail/deno.json"
