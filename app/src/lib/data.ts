@@ -8,6 +8,7 @@ import { session } from './session';
 import { addDays, localDate, isValidTimeZone } from '../../../supabase/functions/_shared/tz.ts';
 import type { TitleRow } from './repeats';
 import type { RenduLite, RenduState, SubjectLite } from './rendus';
+import type { NoteLite } from './notes';
 import type { BlockedKind, CalendarInfo, EntryInput, Role, ScheduleData, ScheduleSettings, TaskInput } from '../engine/schedule';
 
 export interface SettingsRow {
@@ -79,6 +80,7 @@ export interface EntryRow {
 
 export type SubjectRow = SubjectLite;
 export type RenduRow = RenduLite & { created_at: string; updated_at: string };
+export type NoteRow = NoteLite & { created_at: string };
 
 export interface OverrideRow {
   id: string;
@@ -118,6 +120,8 @@ interface Snapshot {
   /** Missing in snapshots saved before rendus existed. */
   subjects?: SubjectRow[];
   rendus?: RenduRow[];
+  /** Missing in snapshots saved before notes existed. */
+  notes?: NoteRow[];
   overrides: OverrideRow[];
   tasks: TaskRow[];
   blockedDays: BlockedDayRow[];
@@ -128,6 +132,7 @@ const CAL_COLUMNS =
 const ENTRY_COLUMNS = 'id, calendar_id, title, start_min, end_min, weekdays, start_date, end_date';
 const SUBJECT_COLUMNS = 'id, name, color_index';
 const RENDU_COLUMNS = 'id, event_id, subject_id, title, due, state, grade, note, created_at, updated_at';
+const NOTE_COLUMNS = 'id, subject_id, title, body, pinned, created_at, updated_at';
 
 /** Postgres numeric comes back as text. */
 function normalizeRendus(rows: RenduRow[]): RenduRow[] {
@@ -142,6 +147,7 @@ export const entries = signal<EntryRow[]>([]);
 export const doneDeadlines = signal<string[]>([]);
 export const subjects = signal<SubjectRow[]>([]);
 export const rendus = signal<RenduRow[]>([]);
+export const notes = signal<NoteRow[]>([]);
 export const overrides = signal<OverrideRow[]>([]);
 export const tasks = signal<TaskRow[]>([]);
 export const blockedDays = signal<BlockedDayRow[]>([]);
@@ -176,6 +182,7 @@ async function saveSnapshot(userId: string): Promise<void> {
     doneDeadlines: doneDeadlines.value,
     subjects: subjects.value,
     rendus: rendus.value,
+    notes: notes.value,
     overrides: overrides.value,
     tasks: tasks.value,
     blockedDays: blockedDays.value,
@@ -198,6 +205,7 @@ async function loadSnapshot(userId: string): Promise<boolean> {
     doneDeadlines.value = snap.doneDeadlines ?? [];
     subjects.value = snap.subjects ?? [];
     rendus.value = snap.rendus ?? [];
+    notes.value = snap.notes ?? [];
     overrides.value = snap.overrides;
     tasks.value = snap.tasks;
     blockedDays.value = snap.blockedDays;
@@ -239,6 +247,12 @@ async function loadSubjects(): Promise<SubjectRow[]> {
   return (data ?? []) as SubjectRow[];
 }
 
+async function loadNotes(): Promise<NoteRow[]> {
+  const { data, error } = await supabase.from('notes').select(NOTE_COLUMNS).order('updated_at', { ascending: false });
+  fail(error);
+  return (data ?? []) as NoteRow[];
+}
+
 async function loadRendus(): Promise<RenduRow[]> {
   const { data, error } = await supabase.from('rendus').select(RENDU_COLUMNS).order('due');
   fail(error);
@@ -269,7 +283,7 @@ export async function loadAll(): Promise<void> {
     fail(se);
     const tz = (s as SettingsRow | null)?.timezone ?? 'Europe/Madrid';
     const range = eventRange(tz);
-    const [cals, evs, ens, dds, sbs, rds, ovs, tks, bds] = await Promise.all([
+    const [cals, evs, ens, dds, sbs, rds, nts, ovs, tks, bds] = await Promise.all([
       supabase.from('calendars').select(CAL_COLUMNS).order('sort_order').order('created_at'),
       supabase.from('events').select('id, calendar_id, title, start_at, end_at, all_day, event_type, status')
         .lt('start_at', range.to).gt('end_at', range.from).order('start_at').limit(5000),
@@ -277,6 +291,7 @@ export async function loadAll(): Promise<void> {
       supabase.from('deadline_done').select('event_id'),
       supabase.from('subjects').select(SUBJECT_COLUMNS).order('created_at'),
       supabase.from('rendus').select(RENDU_COLUMNS).order('due'),
+      supabase.from('notes').select(NOTE_COLUMNS).order('updated_at', { ascending: false }),
       loadTable<OverrideRow>('overrides'),
       loadTable<TaskRow>('tasks'),
       supabase.from('blocked_days').select('date, kind').order('date'),
@@ -287,6 +302,7 @@ export async function loadAll(): Promise<void> {
     fail(dds.error);
     fail(sbs.error);
     fail(rds.error);
+    fail(nts.error);
     fail(bds.error);
     settingsRow.value = s as SettingsRow | null;
     calendars.value = (cals.data ?? []) as CalendarRow[];
@@ -295,6 +311,7 @@ export async function loadAll(): Promise<void> {
     doneDeadlines.value = ((dds.data ?? []) as { event_id: string }[]).map((r) => r.event_id);
     subjects.value = (sbs.data ?? []) as SubjectRow[];
     rendus.value = normalizeRendus((rds.data ?? []) as RenduRow[]);
+    notes.value = (nts.data ?? []) as NoteRow[];
     overrides.value = ovs;
     tasks.value = tks;
     blockedDays.value = (bds.data ?? []) as BlockedDayRow[];
@@ -312,14 +329,15 @@ let channel: RealtimeChannel | null = null;
 export function startRealtime(): void {
   const userId = session.value?.user.id;
   if (!userId || channel || demoMode.value) return;
-  const refresh = async (table: 'tasks' | 'overrides' | 'calendar_entries' | 'deadline_done' | 'subjects' | 'rendus') => {
+  const refresh = async (table: 'tasks' | 'overrides' | 'calendar_entries' | 'deadline_done' | 'subjects' | 'rendus' | 'notes') => {
     try {
       if (table === 'tasks') tasks.value = await loadTable<TaskRow>('tasks');
       else if (table === 'overrides') overrides.value = await loadTable<OverrideRow>('overrides');
       else if (table === 'calendar_entries') entries.value = await loadEntries();
       else if (table === 'deadline_done') doneDeadlines.value = await loadDoneDeadlines();
       else if (table === 'subjects') subjects.value = await loadSubjects();
-      else rendus.value = await loadRendus();
+      else if (table === 'rendus') rendus.value = await loadRendus();
+      else notes.value = await loadNotes();
       await saveSnapshot(userId);
     } catch {
       /* next full load will catch up */
@@ -337,6 +355,7 @@ export function startRealtime(): void {
     )
     .on('postgres_changes', { event: '*', schema: 'public', table: 'subjects', filter: `user_id=eq.${userId}` }, () => void refresh('subjects'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'rendus', filter: `user_id=eq.${userId}` }, () => void refresh('rendus'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'notes', filter: `user_id=eq.${userId}` }, () => void refresh('notes'))
     .subscribe();
 }
 
@@ -574,6 +593,7 @@ export async function deleteSubject(id: string): Promise<void> {
   const { error } = await supabase.from('subjects').delete().eq('id', id);
   fail(error);
   subjects.value = subjects.value.filter((x) => x.id !== id);
+  notes.value = notes.value.map((n) => (n.subject_id === id ? { ...n, subject_id: null } : n));
   await afterWrite();
 }
 
@@ -606,6 +626,32 @@ export async function deleteRendu(id: string): Promise<void> {
 }
 
 export type { RenduState };
+
+// ---------------------------------------------------------------------------
+// Notes
+// ---------------------------------------------------------------------------
+export type NoteFields = Partial<Pick<NoteRow, 'subject_id' | 'title' | 'body' | 'pinned'>>;
+
+export async function addNote(fields: NoteFields & Pick<NoteRow, 'title'>): Promise<void> {
+  const { data, error } = await supabase.from('notes').insert(fields).select(NOTE_COLUMNS).single();
+  fail(error);
+  notes.value = [data as NoteRow, ...notes.value];
+  await afterWrite();
+}
+
+export async function updateNote(id: string, patch: NoteFields): Promise<void> {
+  const { data, error } = await supabase.from('notes').update(patch).eq('id', id).select(NOTE_COLUMNS).single();
+  fail(error);
+  notes.value = notes.value.map((n) => (n.id === id ? (data as NoteRow) : n));
+  await afterWrite();
+}
+
+export async function deleteNote(id: string): Promise<void> {
+  const { error } = await supabase.from('notes').delete().eq('id', id);
+  fail(error);
+  notes.value = notes.value.filter((n) => n.id !== id);
+  await afterWrite();
+}
 
 export type EntryFields = Omit<EntryRow, 'id' | 'calendar_id'>;
 

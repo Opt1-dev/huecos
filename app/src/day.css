@@ -1010,3 +1010,223 @@ button.block.busy {
   align-items: center;
   gap: 6px;
 }
+
+/* Notes: map on top (1/3), writing (left) and titles (right) below (2/3). */
+.card.notes-board {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 2fr);
+  height: calc(100dvh - 150px);
+  min-height: 620px;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.notes-map-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.notes-map-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+.notes-map-head h2,
+.notes-map-head p {
+  margin: 0;
+}
+.note-map {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 8px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+/* The drawing never sizes the map: it fills it. */
+.note-map svg {
+  display: block;
+  position: absolute;
+  inset: 0;
+}
+.note-map-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+}
+.map-link {
+  stroke: var(--muted);
+  stroke-opacity: 0.55;
+}
+.map-link.lit {
+  stroke: var(--accent);
+  stroke-opacity: 1;
+}
+.map-link.dim {
+  stroke-opacity: 0.15;
+}
+.map-node {
+  cursor: pointer;
+  outline: none;
+}
+.map-hit {
+  fill: transparent;
+}
+.map-dot {
+  fill: var(--c);
+  stroke: var(--surface-2);
+  stroke-width: 2;
+}
+.map-node.active .map-dot,
+.map-node.selected .map-dot {
+  stroke: var(--text);
+}
+.map-node:focus-visible .map-hit {
+  stroke: var(--focus);
+  stroke-width: 2;
+}
+.map-node.dim {
+  opacity: 0.35;
+}
+.map-label {
+  fill: var(--text);
+  font-size: 0.7rem;
+  paint-order: stroke;
+  stroke: var(--surface-2);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.map-caption {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 6px;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.notes-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 0;
+}
+.notes-editor,
+.notes-list-zone {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+.notes-list-zone {
+  border-left: 1px solid var(--border);
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+.notes-list-zone h2,
+.notes-editor h2 {
+  margin: 0;
+}
+.notes-editor > form {
+  height: 100%;
+  grid-template-rows: auto auto auto 1fr auto auto auto;
+}
+.note-body-field textarea {
+  min-height: 160px;
+  height: 100%;
+}
+.note-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.note-item details {
+  border-radius: 8px;
+  background: var(--surface-2);
+  border-left: 3px solid transparent;
+}
+.note-item.pinned details {
+  border-left-color: var(--accent);
+}
+.note-item.selected details {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.note-item summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 10px;
+  cursor: pointer;
+  list-style: none;
+}
+.note-item summary::-webkit-details-marker {
+  display: none;
+}
+.note-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c);
+}
+.note-item-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.note-item summary .badge {
+  flex: none;
+  background: var(--surface);
+  font-size: 0.72rem;
+}
+.note-item-body {
+  padding: 0 10px 10px 28px;
+}
+.note-item-body p {
+  margin: 0;
+}
+.note-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+/* Phones and narrow windows: the three zones stack. */
+@media (max-width: 899px) {
+  .card.notes-board {
+    height: auto;
+    min-height: 0;
+    grid-template-rows: auto;
+  }
+  .note-map {
+    flex: none;
+    height: 33vh;
+    min-height: 220px;
+  }
+  .notes-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .notes-editor,
+  .notes-list-zone {
+    overflow: visible;
+  }
+  .notes-list-zone {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+  .notes-editor > form {
+    height: auto;
+  }
+}

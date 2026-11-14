@@ -107,6 +107,7 @@ Merging a pull request into `main` runs `deploy.yml`:
 | `public.settings` | One row per user: language, time zone, free-time window, minimum slot, modules, prácticas settings, last sync | Owner only (read/update) |
 | `public.calendars` | A user's calendars: name, role, colour, buffers before/after, counts as busy, source (`feed` or `manual`), hidden event titles, work per deadline and max per day, feed host, last sync/error | Owner; `feed_secret_id` can't be written by the browser; `source` is set once; a manual calendar never has a feed |
 | `public.deadline_done` | Deadline events marked done (no more work placed) | Owner, only for their own events |
+| `public.notes` | Notes: title, optional subject (unlinked if the subject is deleted), text up to 5,000 characters, pinned. `updated_at` follows content edits only, not pinning | Owner; subject must be theirs |
 | `public.subjects` | Subjects: name (unique per user, case-insensitive), colour slot 0–7 | Owner |
 | `public.rendus` | Assignments: optional deadline event (one rendu per event, kept unlinked if the event goes), subject (can't be deleted while used), title, due date, state `todo|done|submitted|graded`, grade 0–10, note | Owner; event and subject must be theirs. Triggers keep it in step with `deadline_done`: a rendu past "todo" marks its deadline done, back to "todo" or deleted unmarks it; marking a deadline done moves its rendu to "done" (creating it, prefix removed, local due date) and unmarking moves "done" back to "todo" |
 | `public.calendar_entries` | Entries of manual calendars: title, start/end time, ISO weekdays, from/until dates (same date = once). Expanded by the app, not stored per occurrence | Owner, only into their own manual calendars |
@@ -128,6 +129,14 @@ A user's settings row is created automatically at sign-up; an invitation with ro
 - **Notes par matière:** grade (0–10) by due date, one line per subject, dashed reference lines at 7.5 and 5, tooltip on hover/focus, legend with each subject's average. Colours are the 8 validated categorical slots (light and dark).
 - **Nouveau rendu** and **Matières** (add, rename, colour, delete only when unused).
 - Finishing a rendu frees its deadline's booked work time, and marking a deadline done in *Ma journée* moves its rendu to "Fait".
+
+## Notes
+
+- Layout: on wide screens the tab is split in three: the **note map** across the top third, the **writing area** bottom left (new note, or the note being edited) and the **titles** bottom right (collapsible to read each note). On phones and narrow windows the three zones stack.
+- Note map: each note is a point (coloured by subject, bigger when pinned) on a plain background; a line joins two notes whose titles share a word (3+ letters, case and accents ignored, common FR/ES/EN short words left out). The layout is computed once per set of notes (deterministic), then stretched to fill the map. Labels show where they fit without overlapping; hovering or focusing a point highlights its links and shows the shared words; clicking it opens the note in the list.
+- Form: title, optional subject, text (5,000 characters max, with a counter).
+- List: pinned first, then most recently modified. Each note shows its title, subject, text (line breaks kept), "Modifiée le …", and Épingler / Modifier (in the writing area: Enregistrer / Annuler) / Supprimer.
+- Search in title and text (case and accents ignored, every word must appear) and filter by subject, including "Sans matière".
 
 ## Calendar sync
 
@@ -170,6 +179,6 @@ These rules drive the free-time computation in `app/src/engine/schedule.ts`, a p
 - **Phase 0:** repository, CI/CD, Supabase foundation (invites, settings), app shell with sign-in and languages.
 - **Phase 1:** calendars and feed settings, `sync-calendars` Edge Function + pg_cron, scheduling engine, "Ma journée".
 - **Phase 2:** "Rendus et notes" (done; no import from "Ma journée", by choice).
-- **Phase 3:** "Notes".
+- **Phase 3:** "Notes" (done).
 - **Phase 4:** Outlook corrections block (Microsoft Graph, per user).
 - **Phase 5:** PWA polish (install, offline, icons) and deployment.
