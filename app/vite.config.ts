@@ -3,7 +3,7 @@ import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// GitHub Pages serves the app under /huecos/; BASE_PATH lets a custom domain use "/".
+// Dev server uses /huecos/; production sets BASE_PATH=/ for https://huecos.toloben.es/.
 const base = process.env.BASE_PATH ?? '/huecos/';
 
 export default defineConfig({

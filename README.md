@@ -4,7 +4,7 @@ Huecos is a phone-first PWA that shows your **real free time** and organises you
 
 - **Frontend:** Vite + TypeScript + Preact, installable PWA, offline day view. UI in French, Spanish and English.
 - **Backend:** Supabase (Postgres + RLS, magic-link Auth, Edge Functions, pg_cron, Realtime).
-- **Hosting:** GitHub Pages, deployed by GitHub Actions on every merge to `main`.
+- **Hosting:** GitHub Pages at **https://huecos.toloben.es/**, deployed by GitHub Actions on every merge to `main`.
 
 | Path | Contents |
 | --- | --- |
@@ -71,7 +71,7 @@ Nothing secret is committed. Create these once.
 
 ### Supabase Dashboard (once, after the first deploy)
 
-1. **Authentication → URL Configuration:** Site URL `https://opt1-dev.github.io/huecos/`; add redirect URLs `https://opt1-dev.github.io/huecos/` and `http://localhost:5173/huecos/`.
+1. **Authentication → URL Configuration:** Site URL `https://huecos.toloben.es/`; add redirect URLs `https://huecos.toloben.es/` and `http://localhost:5173/huecos/` (keep `https://opt1-dev.github.io/huecos/` for a few weeks so older links still work).
 2. **Authentication → Hooks → Before User Created:** type *Postgres*, schema `app_private`, function `before_user_created`, enable.
 3. **Invite the first admin** (SQL editor), then sign in with that email:
    ```sql
@@ -100,6 +100,12 @@ Settings → Pages → Source: **GitHub Actions** (already enabled). The reposit
 4. Supabase dashboard → *Edge Functions* → *Secrets*: `MS_CLIENT_ID` (the *Application (client) ID*) and `MS_CLIENT_SECRET` (the secret's **Value**). Never put them in the repository.
 
 The secret expires (6–24 months): create a new one before then and replace `MS_CLIENT_SECRET`.
+
+### Custom domain (`huecos.toloben.es`)
+
+1. **DNS** (at the `toloben.es` registrar): a `CNAME` record, name `huecos`, value `opt1-dev.github.io.`. No `A` records are needed for a subdomain.
+2. **GitHub → Settings → Pages:** Custom domain `huecos.toloben.es`, wait for the DNS check, then tick **Enforce HTTPS**. Also verify `toloben.es` under your account Settings → Pages so nobody else can claim it.
+3. The deploy workflow builds with `BASE_PATH=/`, so the app lives at the root of the domain. The old `opt1-dev.github.io/huecos/` address redirects there; an app installed from the old address must be reinstalled from the new one.
 
 ## Deploying
 
