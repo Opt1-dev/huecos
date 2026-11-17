@@ -147,7 +147,7 @@ export async function msMessagesSince(accessToken: string, sinceIso: string, max
 
 /** Where the app may send the user back after signing in. */
 const RETURN_ORIGINS = ['https://opt1-dev.github.io', 'https://huecos.toloben.es', 'http://localhost:5173'];
-export const DEFAULT_RETURN = 'https://opt1-dev.github.io/huecos/';
+export const DEFAULT_RETURN = 'https://huecos.toloben.es/';
 
 export function safeReturnTo(value: unknown): string | null {
   if (typeof value !== 'string') return null;
